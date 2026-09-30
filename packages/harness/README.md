@@ -27,6 +27,10 @@ motor-ui-parity --config <file> [--reference <dir>] [--blocks A,B] [--theme <nam
   other than 0, `--reference`, states skipped because the reference did not capture them) is listed in `summary.json`
   (`partial`), on the verdict line (`gate: PARTIAL OK` / `FAILED (partial run)`) and in the report. `gate: OK` is only
   printed for a complete run. A run with zero comparisons fails.
+- **Declared clipping is not a narrowing.** Where the reference records the default state at a viewport as `clipped`
+  (the page clips the block there, e.g. outside a carousel track), every state of that instance at that viewport is
+  skipped as outside the contract: counted under `skipped` (`declared: true`), shown as `declared clipped` on the verdict
+  line, and not listed in `partial`. Any other missing capture keeps the run partial.
 - Exit codes: 0 all good, 1 differences or missing implementations, 2 harness error (font not loaded, asset missing, ...).
 - Report: `<report>/index.html` (diff images, style diffs, breakpoint-edge table) and `<report>/summary.json`. The report
   directory is wiped before a run, so the harness refuses one that is or contains the working directory, the config, the
@@ -101,7 +105,8 @@ export default defineConfig({
 - **Legacy render.** After fonts and images have loaded, each matched element's border box is measured, then the element is
   replaced by a placeholder: one empty `div` with that width and height (fractional px kept), the computed margins, flat neutral
   fill, `flex: none`, and the properties that decide how it takes part in its parent (display mapped to block or inline-block,
-  position and insets, float, clear, vertical-align, align-self, justify-self, order, grid placement). The surrounding layout does
+  position and insets, float, clear, vertical-align, align-self, justify-self, order, grid placement, transform, translate,
+  rotate, scale and, when transformed, transform-origin; the measured box includes transforms). The surrounding layout does
   not change. Nested matches: the outermost element wins. A selector that matches nothing, is invalid, matches the block root or
   a `display: contents` element is a harness error (exit 2), not a silent pass.
 - **Adapter contract.** `ctx.foreign` (in `props` and `slots`) lists the measured boxes in document order:

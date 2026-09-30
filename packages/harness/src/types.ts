@@ -157,6 +157,8 @@ export interface SkippedResult {
   viewport: number
   state: string
   reason: string
+  /** The reference records the block as clipped at this viewport (default state): outside the contract, not a narrowing. */
+  declared: boolean
 }
 
 export interface MissingResult {

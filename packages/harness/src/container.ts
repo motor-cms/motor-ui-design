@@ -9,7 +9,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 /**
  * The placeholder of a foreign child: one element with the border-box size and the margins of the original, and the
- * layout-relevant properties that decide how it takes part in its parent (position, float, flex/grid item properties).
+ * layout-relevant properties that decide how it takes part in its parent (position, float, flex/grid item properties, transforms).
  * It is taken out of any flex shrinking and stretching.
  */
 export const placeholderHtml = (b: Pick<ForeignBox, 'id' | 'index' | 'width' | 'height' | 'margin' | 'layout'>): string => {

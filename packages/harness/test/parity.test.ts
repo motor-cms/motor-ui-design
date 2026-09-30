@@ -161,6 +161,19 @@ describe('a narrowed or altered run never reads like the full gate (I2)', () => 
     const sk = await go(s2, 'gate', { viewports: [768] })
     expect(sk.totals.skipped).toBe(1)
     expect(sk.partial.join(' | ')).toMatch(/1 state\/viewport combination\(s\) skipped/)
+
+    // the reference declares the block clipped at a width: its states there are skipped, the run stays a full run
+    const s3 = setup('partial-clipped', (ref) => {
+      const f = join(ref, 'DemoBlock/demo-1/capture.json')
+      const c = JSON.parse(readFileSync(f, 'utf8'))
+      c.states.default['768'].status = 'clipped'
+      delete c.states.hover['768']
+      writeFileSync(f, JSON.stringify(c))
+    })
+    const cl = await go(s3, 'gate', { viewports: [768] })
+    expect(cl.totals.skipped).toBe(2)
+    expect(cl.skipped.every((x) => x.declared)).toBe(true)
+    expect(cl.partial.join(' | ')).not.toMatch(/skipped/)
   }, 300_000)
 
   it('zero comparisons fail the run', async () => {

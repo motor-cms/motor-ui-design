@@ -65,7 +65,7 @@ const main = async () => {
   const gaps = t.contextGap ? `, ${t.contextGap} context gap (not a pass)` : ''
   // A narrowed or altered run never reads like the full contract run.
   const verdict = summary.ok ? (summary.partial.length ? 'PARTIAL OK' : 'OK') : summary.partial.length ? 'FAILED (partial run)' : 'FAILED'
-  console.log(`${summary.mode}: ${verdict}: ${t.checks} checks, ${t.pass} pass, ${t.fail} fail, ${t.exempt} exempt${gaps}, ${t.skipped} skipped, ${t.missing} missing; ${summary.seconds}s`)
+  console.log(`${summary.mode}: ${verdict}: ${t.checks} checks, ${t.pass} pass, ${t.fail} fail, ${t.exempt} exempt${gaps}, ${t.skipped} skipped${t.skipped ? ` (${summary.skipped.filter((x) => x.declared).length} declared clipped)` : ''}, ${t.missing} missing; ${summary.seconds}s`)
   if (summary.partial.length) console.log(`  PARTIAL, not a parity result: ${summary.partial.join('; ')}`)
   process.exitCode = summary.ok ? 0 : 1
 }

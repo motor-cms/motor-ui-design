@@ -252,12 +252,14 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
       // states the reference captured at this viewport
       const states: string[] = []
       const widths: Record<string, number | undefined> = {}
+      // the capture declares the block clipped by its page at this width (e.g. outside a carousel track): no state exists
+      const declared = inst.capture.default?.[String(vp)]?.status === 'clipped'
       for (const st of inst.states) {
         const c = inst.capture[st]?.[String(vp)]
         if (c?.status === 'captured') {
           states.push(st)
           widths[st] = c.width
-        } else skipped.push({ key: inst.key, instance: inst.instance, viewport: vp, state: st, reason: c ? `not captured in the reference: ${c.status}` : 'no capture entry' })
+        } else skipped.push({ key: inst.key, instance: inst.instance, viewport: vp, state: st, reason: c ? `not captured in the reference: ${c.status}` : 'no capture entry', declared })
       }
       if (!states.length) return
       const cap0 = inst.capture[states[0]][String(vp)]
@@ -419,7 +421,8 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
   if (opts.theme && opts.theme !== (cfg.theme ?? 'default')) partial.push(`theme ${opts.theme} instead of the configured ${cfg.theme ?? 'default'}`)
   if (scrollbar !== 0) partial.push(`scrollbar ${scrollbar}px (the contract run has 0)`)
   if (opts.reference && reference !== abs(opts.configDir, cfg.reference ?? 'reference')) partial.push(`reference pack overridden (${reference})`)
-  if (skipped.length) partial.push(`${skipped.length} state/viewport combination(s) skipped, not captured in the reference`)
+  const undeclared = skipped.filter((s) => !s.declared)
+  if (undeclared.length) partial.push(`${undeclared.length} state/viewport combination(s) skipped, not captured in the reference`)
 
   const summary: RunSummary = {
     mode: opts.mode,

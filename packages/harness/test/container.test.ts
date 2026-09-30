@@ -99,6 +99,15 @@ describe('container mode: a foreign child does not make the instance fail, the f
     expect(readFileSync(join(s.dir, 'report', 'index.html'), 'utf8')).toMatch(/<h2>Container mode<\/h2>/)
   }, 240_000)
 
+  it('a transformed foreign child: the placeholder carries the transform, so offset and pixels agree', async () => {
+    const s = setup('transform', (d) => edit(d, 'reference/frontend.css', 'margin: 0 0 0 40px; }', 'margin: 0 0 0 40px; transform: translateY(-20px); }'))
+    const r = await go(s, {}, { blocks: ['BadgeBlock'] })
+    expect(failed(r), failed(r).map((x) => x.message).join('\n')).toEqual([])
+    for (const x of front(r)) {
+      expect(box(x, 'dot').y, `@${x.viewport}`).toBe(130)
+    }
+  }, 240_000)
+
   it('control: without container mode configured the same instances fail as before', async () => {
     const s = setup('control')
     const r = await go(s, { containers: undefined })

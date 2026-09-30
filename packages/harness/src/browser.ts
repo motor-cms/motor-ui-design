@@ -219,7 +219,7 @@ const MEASURE_FOREIGN = (entries: { id: string; selector: string }[]) => {
   }
   const kept = found.filter((f) => !found.some((o) => o.el !== f.el && o.el.contains(f.el)))
   kept.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
-  const DEFAULTS: Record<string, string> = { position: 'static', float: 'none', clear: 'none', 'vertical-align': 'baseline', 'align-self': 'auto', 'justify-self': 'auto', order: '0', 'grid-column-start': 'auto', 'grid-column-end': 'auto', 'grid-row-start': 'auto', 'grid-row-end': 'auto' }
+  const DEFAULTS: Record<string, string> = { position: 'static', float: 'none', clear: 'none', 'vertical-align': 'baseline', 'align-self': 'auto', 'justify-self': 'auto', order: '0', 'grid-column-start': 'auto', 'grid-column-end': 'auto', 'grid-row-start': 'auto', 'grid-row-end': 'auto', transform: 'none', translate: 'none', rotate: 'none', scale: 'none' }
   const rootRect = roots[0].getBoundingClientRect()
   const boxes = []
   for (let i = 0; i < kept.length; i++) {
@@ -231,6 +231,8 @@ const MEASURE_FOREIGN = (entries: { id: string; selector: string }[]) => {
     // a box the placeholder can size: inline boxes become inline-blocks, every other display a block
     layout.display = cs.display === 'none' ? 'none' : cs.display.startsWith('inline') ? 'inline-block' : 'block'
     for (const k of Object.keys(DEFAULTS)) if (cs.getPropertyValue(k) !== DEFAULTS[k]) layout[k] = cs.getPropertyValue(k)
+    // the measured box includes transforms, so the placeholder must be drawn with them (same size, so same origin maths)
+    if (cs.transform !== 'none' || cs.translate !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none') layout['transform-origin'] = cs.transformOrigin
     if (cs.position !== 'static') for (const k of ['top', 'right', 'bottom', 'left']) if (cs.getPropertyValue(k) !== 'auto') layout[k] = cs.getPropertyValue(k)
     el.setAttribute('data-parity-measure', String(i))
     boxes.push({ id, index: i, selector, x: r.left - rootRect.left, y: r.top - rootRect.top, width: r.width, height: r.height, margin: `${cs.marginTop} ${cs.marginRight} ${cs.marginBottom} ${cs.marginLeft}`, layout })
