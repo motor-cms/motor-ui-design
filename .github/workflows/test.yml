@@ -38,5 +38,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright Chromium
+        # the token build test renders in Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Build and test
+        # `pnpm test` runs `pnpm build` first, then vitest
         run: pnpm test
