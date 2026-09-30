@@ -5,7 +5,7 @@ export interface PropsContext {
   key: string
   instance: string
   viewport: number
-  /** Markup of the legacy render for this instance and viewport. Real adapters ignore it (identity fixtures use it). */
+  /** Markup of the legacy render for this instance and viewport. Only set in identity/test mode (--legacy-css-on-new), else ''. */
   legacyHtml: string
 }
 
@@ -45,11 +45,21 @@ export interface ParityConfig {
   viewports?: number[]
   viewportHeight?: number
   reportDir?: string
+  /**
+   * validate only: file (relative to the config) listing instances whose reference screenshot contains page context the
+   * excerpt lacks (ancestor backdrops, floating page chrome). Failures there are reported as "context gap" with the reason,
+   * never as pass. The gate never reads this file.
+   */
+  validateContextGaps?: string
+  /** Extra directories the dev server may serve (the block map's own directory and the harness are always allowed). */
+  fsAllow?: string[]
 }
 
 export const defineConfig = (c: ParityConfig): ParityConfig => c
 
 export type Exemptions = Record<string, { viewports?: number[]; reason: string }>
+/** validate-context-gaps.json: "<Key>/<instance>" -> reason, optionally only for some viewports. */
+export type ContextGaps = Record<string, { viewports?: number[]; reason: string }>
 
 export type Mode = 'validate' | 'gate'
 export type Comparison = 'reference-vs-legacy' | 'frontend-vs-legacy' | 'builder-vs-frontend'
@@ -67,7 +77,7 @@ export interface CheckResult {
   instance: string
   viewport: number
   state: string
-  status: 'pass' | 'fail' | 'exempt'
+  status: 'pass' | 'fail' | 'exempt' | 'context-gap'
   /** Human reason for a failure or an exemption. */
   message?: string
   diffPixels?: number
@@ -78,8 +88,6 @@ export interface CheckResult {
   /** "edge <a>/<b>" when the viewport is one side of a breakpoint edge. */
   edge?: string
   images?: { expected?: string; actual?: string; diff?: string }
-  /** validate: the element paints translucent pixels; the backdrop of the reference was inferred (see compareWithBackdrop) */
-  backdropInferred?: boolean
   /** sub-pixel origin (x, y) of the element used for the render (validate: the fitted one) */
   origin?: [number, number]
   styleDiffs?: StyleDiff[]
@@ -107,9 +115,25 @@ export interface RunSummary {
   seconds: number
   scrollbar: number
   tolerance: { threshold: number; maxDiffPixelRatio: number }
-  totals: { checks: number; pass: number; fail: number; exempt: number; skipped: number; missing: number }
+  totals: { checks: number; pass: number; fail: number; exempt: number; contextGap: number; skipped: number; missing: number }
   missing: MissingResult[]
+  /** Why this run is not the full contract run (narrowed viewports/blocks, identity mode, skipped states, ...). Empty for a full run. */
+  partial: string[]
+  /** validate: context-gap entries that matched no failing check any more (stale entries) */
+  unusedContextGaps: string[]
+  /** Informational pass at another scrollbar width, per breakpoint edge. Never part of the verdict. */
+  edgeReport?: EdgeReport
   results: CheckResult[]
   skipped: SkippedResult[]
   ok: boolean
+}
+
+export interface EdgeReport {
+  scrollbar: number
+  checks: number
+  differ: number
+  /** per block and comparison: each breakpoint edge at both sides */
+  rows: { key: string; comparison: string; edge: string; a: string; b: string }[]
+  /** the differing checks, same shape as results */
+  results: CheckResult[]
 }

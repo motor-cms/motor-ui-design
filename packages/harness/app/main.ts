@@ -125,7 +125,9 @@ const run = async () => {
     if (!loader) throw new Error(`block map has no ${route} implementation for ${key}`)
     const mod = await loader()
     const component = mod.default ?? mod
-    const ctx = { key, instance, viewport: vp, legacyHtml: html }
+    // The legacy markup is handed to adapters only in identity/test mode (--legacy-css-on-new): a real adapter must map
+    // the fixture to props itself, that mapping is what the app will use.
+    const ctx = { key, instance, viewport: vp, legacyHtml: q.get('legacyCss') === '1' ? html : '' }
     const props = entry.props(fixture, ctx)
     const slotHtml: Record<string, string> = entry.slots ? entry.slots(fixture, ctx) : {}
     const slots = Object.fromEntries(Object.entries(slotHtml).map(([n, s]) => [n, () => h('span', { style: 'display:contents', innerHTML: s })]))

@@ -1,6 +1,6 @@
 import { PNG } from 'pngjs'
 import { describe, expect, it } from 'vitest'
-import { comparePng, compareWithBackdrop, diffStyles } from '../src/compare.js'
+import { comparePng, diffStyles } from '../src/compare.js'
 import { inferOrigin, originCandidates } from '../src/pack.js'
 
 const solid = (w: number, h: number, rgb: [number, number, number], dot?: [number, number]) => {
@@ -49,45 +49,5 @@ describe('sub-pixel origin', () => {
     expect(y).toBeGreaterThan(0)
     expect(originCandidates([341, 145], { width: 340, height: 144 }).every(([cx, cy]) => cx > 0 && cy > 0)).toBe(true)
     expect(originCandidates([340, 144], { width: 340, height: 144 })).toEqual([[0, 0]])
-  })
-})
-
-describe('compareWithBackdrop', () => {
-  const W = 120
-  const H = 60
-  // reference: horizontal gradient backdrop; a 60x30 box in the middle painted 50 % white over it
-  const bg = (x: number) => 200 + Math.round((x * 40) / W)
-  const build = (paint: (x: number, y: number) => number) => {
-    const ref = new PNG({ width: W, height: H })
-    const leg = new PNG({ width: W, height: H })
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++) {
-        const i = (y * W + x) * 4
-        const a = paint(x, y)
-        const c = (t: number) => Math.round(a * 255 + (1 - a) * bg(x) * t)
-        ref.data.set([c(1), c(0.9), c(0.8), 255], i)
-        leg.data.set([255, 255, 255, Math.round(a * 255)], i)
-      }
-    return { ref: PNG.sync.write(ref), leg: PNG.sync.write(leg) }
-  }
-  const box = (x: number, y: number) => (x >= 30 && x < 90 && y >= 15 && y < 45 ? 0.5 : 0)
-
-  it('accepts a translucent element over a smooth backdrop that only the reference has', () => {
-    const { ref, leg } = build(box)
-    expect(comparePng(ref, leg).ok).toBe(false) // compared as they are, the two differ
-    expect(compareWithBackdrop(ref, leg).ok).toBe(true)
-  })
-
-  it('rejects a render that lacks something the reference paints, and one with a shifted box', () => {
-    const { ref } = build(box)
-    const missing = build(() => 0).leg
-    expect(compareWithBackdrop(ref, missing).ok).toBe(false)
-    const shifted = build((x, y) => box(x - 4, y)).leg
-    expect(compareWithBackdrop(ref, shifted).ok).toBe(false)
-  })
-
-  it('has nothing to infer for a fully opaque element', () => {
-    const { ref } = build(() => 1)
-    expect(compareWithBackdrop(ref, ref).ok).toBe(false)
   })
 })

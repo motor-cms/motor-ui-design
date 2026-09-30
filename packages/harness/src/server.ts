@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { createServer, type Plugin, type ViteDevServer } from 'vite'
@@ -71,6 +71,34 @@ const parityPlugin = (o: { reference: string; blockMap?: string; css: string[]; 
 
 const basename = (p: string) => p.split('/').pop() ?? p
 
+const real = (p: string) => {
+  try {
+    return realpathSync(p)
+  } catch {
+    return resolve(p)
+  }
+}
+
+/**
+ * What the dev server may serve: the reference pack, the harness app, the directories of the block map and of the
+ * consumer CSS (their real paths: consumer packages sit behind symlinks), the pnpm stores of the harness and of the
+ * working directory (Vue and the consumer's plugins resolve into them), and the config's `fsAllow`.
+ */
+export const fsAllowList = (o: { reference: string; cwd: string; blockMap?: string; css: string[]; fsAllow?: string[] }): string[] => {
+  const require = createRequire(import.meta.url)
+  const dirs = new Set<string>([real(o.reference), real(appDir), real(resolve(here, '..'))])
+  if (o.blockMap) dirs.add(dirname(real(o.blockMap)))
+  for (const f of o.css) dirs.add(dirname(real(f)))
+  for (const f of o.fsAllow ?? []) dirs.add(real(f))
+  const stores = [real(require.resolve('vue/package.json')), real(join(o.cwd, 'node_modules'))]
+  for (const p of stores) {
+    const i = p.indexOf(`${sep}node_modules${sep}.pnpm`)
+    if (i >= 0) dirs.add(p.slice(0, i) + `${sep}node_modules${sep}.pnpm`)
+    else dirs.add(p.endsWith(`${sep}node_modules`) ? p : dirname(p))
+  }
+  return [...dirs]
+}
+
 export const startServer = async (o: {
   reference: string
   cwd: string
@@ -78,6 +106,8 @@ export const startServer = async (o: {
   css: string[]
   legacyCss?: ParityConfig['legacyCss']
   vitePlugins?: unknown[]
+  /** extra directories the dev server may serve, besides the ones the run needs */
+  fsAllow?: string[]
 }): Promise<HarnessServer> => {
   const require = createRequire(import.meta.url)
   const server: ViteDevServer = await createServer({
@@ -92,9 +122,8 @@ export const startServer = async (o: {
     // in the middle of a run ("optimized dependencies changed") and reload pages.
     resolve: { dedupe: ['vue'], alias: [{ find: /^vue$/, replacement: dirname(require.resolve('vue/package.json')) + '/dist/vue.runtime.esm-bundler.js' }] },
     optimizeDeps: { noDiscovery: true, include: [] },
-    server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false, watch: null, // Local dev server on 127.0.0.1 for the length of a run. Consumer blocks live behind package symlinks in
-    // other checkouts, so the allow-list would have to guess them.
-    fs: { strict: false } },
+    // Local dev server on 127.0.0.1 for the length of a run. It serves files from an explicit allow-list only.
+    server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false, watch: null, fs: { strict: true, allow: fsAllowList(o) } },
   })
   await server.listen()
   const addr = server.httpServer!.address() as AddressInfo

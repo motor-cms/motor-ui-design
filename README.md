@@ -17,7 +17,7 @@ repos and depend on these packages.
 ```sh
 pnpm install
 pnpm build     # tsc per package
-pnpm test      # build, then Vitest (smoke tests and the no-client-data guard)
+pnpm test      # build, then Vitest (smoke tests, the structural no-client-data guard, the Tailwind 4 token test)
 pnpm parity    # stub until the harness lands; exits 1
 ```
 

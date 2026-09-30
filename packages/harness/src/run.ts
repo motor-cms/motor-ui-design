@@ -1,12 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
-import { DEFAULT_VIEWPORTS, DEFAULT_VIEWPORT_HEIGHT, RenderError, edgeOf, newContext, render, type BrowserOptions, type Rendered } from './browser.js'
-import { TOLERANCE, comparePng, compareWithBackdrop, diffStyles, type PixelResult } from './compare.js'
+import { DEFAULT_VIEWPORTS, DEFAULT_VIEWPORT_HEIGHT, EDGES, RenderError, edgeOf, newContext, render, type BrowserOptions, type Rendered } from './browser.js'
+import { TOLERANCE, comparePng, diffStyles, type PixelResult } from './compare.js'
 import { inferOrigin, listInstances, originCandidates, listKeys, pngName, pngSize, type InstanceInfo } from './pack.js'
-import { writeReport } from './report.js'
+import { edgeTable, writeReport } from './report.js'
 import { startServer } from './server.js'
-import type { CheckResult, Comparison, Exemptions, MissingResult, Mode, ParityConfig, RunSummary, SkippedResult } from './types.js'
+import type { CheckResult, Comparison, ContextGaps, EdgeReport, Exemptions, MissingResult, Mode, ParityConfig, RunSummary, SkippedResult } from './types.js'
 
 export interface RunOptions {
   mode: Mode
@@ -14,6 +14,8 @@ export interface RunOptions {
   /** directory relative config paths resolve against */
   configDir: string
   cwd: string
+  /** the config file itself (a report dir must not contain it) */
+  configFile?: string
   reference?: string
   blocks?: string[]
   theme?: string
@@ -23,10 +25,60 @@ export interface RunOptions {
   /** load the legacy CSS on /frontend and /builder as well (identity fixtures, Review Focus 3) */
   legacyCssOnNew?: boolean
   concurrency?: number
+  /** gate: after the verdict pass, an informational pass at scrollbar EDGE_SCROLLBAR over the breakpoint-edge viewports */
+  edgeReport?: boolean
   log?: (m: string) => void
 }
 
 const abs = (base: string, p: string) => (isAbsolute(p) ? p : resolve(base, p))
+
+/** Scrollbar width of the informational edge pass (a classic scrollbar, Review Focus 1). */
+export const EDGE_SCROLLBAR = 15
+
+const REPORT_MARKER = '.parity-report'
+
+const real = (p: string) => {
+  try {
+    return realpathSync(p)
+  } catch {
+    return resolve(p)
+  }
+}
+const contains = (outer: string, inner: string) => inner === outer || inner.startsWith(outer.endsWith(sep) ? outer : outer + sep)
+
+/**
+ * The report directory is wiped before a run. Refuse one that is, or contains, the working directory, the config, the
+ * reference pack or a file the run reads; only wipe a directory that is empty or already holds a summary.json.
+ */
+export const prepareReportDir = (reportDir: string, protect: { label: string; path: string }[]) => {
+  const dir = real(reportDir)
+  for (const { label, path } of protect) {
+    if (contains(dir, real(path))) throw new Error(`refusing to use ${reportDir} as the report directory: it is or contains ${label} (${path})`)
+  }
+  if (existsSync(dir)) {
+    const entries = readdirSync(dir)
+    // A previous report holds summary.json; a run that died before writing it left the marker the harness puts first.
+    if (entries.length && !entries.includes('summary.json') && !entries.includes(REPORT_MARKER)) {
+      throw new Error(`refusing to clear ${reportDir}: it is not empty and holds no summary.json, so it is not a previous report directory`)
+    }
+  }
+  rmSync(dir, { recursive: true, force: true })
+  mkdirSync(join(dir, 'img'), { recursive: true })
+  writeFileSync(join(dir, REPORT_MARKER), 'created by motor-ui-parity; the directory is wiped at the start of every run\n')
+}
+
+export const loadContextGaps = (file: string): ContextGaps => {
+  const raw = JSON.parse(readFileSync(file, 'utf8'))
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${file}: context gaps must be an object keyed by "<Key>/<instance>"`)
+  for (const [k, v] of Object.entries(raw as Record<string, any>)) {
+    if (!/^[^/]+\/[^/]+$/.test(k)) throw new Error(`${file}: "${k}" must be "<Key>/<instance>"`)
+    if (!v || typeof v.reason !== 'string' || !v.reason.trim()) throw new Error(`${file}: context gap for ${k} needs a non-empty "reason"`)
+    if (v.viewports !== undefined && (!Array.isArray(v.viewports) || v.viewports.some((n: unknown) => typeof n !== 'number'))) {
+      throw new Error(`${file}: context gap for ${k}: "viewports" must be a list of numbers`)
+    }
+  }
+  return raw as ContextGaps
+}
 
 export const loadExemptions = (file: string | undefined): Exemptions => {
   if (!file || !existsSync(file)) return {}
@@ -70,6 +122,9 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
   const viewportHeight = cfg.viewportHeight ?? DEFAULT_VIEWPORT_HEIGHT
   const scrollbar = opts.scrollbar ?? 0
   const reportDir = abs(opts.reportDir ? opts.cwd : opts.configDir, opts.reportDir ?? cfg.reportDir ?? 'report')
+  const contextGapsFile = opts.mode === 'validate' && cfg.validateContextGaps ? abs(opts.configDir, cfg.validateContextGaps) : undefined
+  const contextGaps: ContextGaps = contextGapsFile ? loadContextGaps(contextGapsFile) : {}
+  const usedGaps = new Set<string>()
   const exemptionsFile = cfg.exemptions ? abs(opts.configDir, cfg.exemptions) : join(opts.configDir, 'exemptions.json')
   const exemptions = opts.mode === 'gate' ? loadExemptions(exemptionsFile) : {}
   const blockMapFile = cfg.blockMap ? abs(opts.configDir, cfg.blockMap) : undefined
@@ -80,18 +135,27 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
   const keys = opts.blocks?.length ? opts.blocks : allKeys
   for (const k of keys) if (!allKeys.includes(k)) throw new Error(`block ${k} is not in the reference (${allKeys.join(', ')})`)
   for (const k of Object.keys(exemptions)) if (!allKeys.includes(k)) throw new Error(`${exemptionsFile}: exemption for unknown block ${k}`)
+  for (const k of Object.keys(contextGaps)) if (!existsSync(join(reference, k))) throw new Error(`${contextGapsFile}: context gap for unknown instance ${k}`)
 
   // Which keys have a new implementation (gate). The block map module is read through Vite, so ask the server side
   // through a tiny probe page instead of importing it here: the harness stays free of the consumer's toolchain.
-  rmSync(reportDir, { recursive: true, force: true })
-  mkdirSync(join(reportDir, 'img'), { recursive: true })
+  prepareReportDir(reportDir, [
+    { label: 'the working directory', path: opts.cwd },
+    { label: 'the config directory', path: opts.configDir },
+    ...(opts.configFile ? [{ label: 'the config file', path: opts.configFile }] : []),
+    { label: 'the reference pack', path: reference },
+    ...(blockMapFile ? [{ label: 'the block map', path: blockMapFile }] : []),
+    ...cssFiles.map((f) => ({ label: 'a configured CSS file', path: f })),
+  ])
 
-  const server = await startServer({ reference, cwd: opts.cwd, blockMap: blockMapFile, css: cssFiles, legacyCss: cfg.legacyCss, vitePlugins: cfg.vitePlugins })
+  const server = await startServer({ reference, cwd: opts.cwd, blockMap: blockMapFile, css: cssFiles, legacyCss: cfg.legacyCss, vitePlugins: cfg.vitePlugins, fsAllow: (cfg.fsAllow ?? []).map((f) => abs(opts.configDir, f)) })
   const browser = await chromium.launch()
-  const results: CheckResult[] = []
-  const skipped: SkippedResult[] = []
+  let results: CheckResult[] = []
+  let skipped: SkippedResult[] = []
   const missing: MissingResult[] = []
   let imgCount = 0
+  let keepImages = true
+  let edge: EdgeReport | undefined
   try {
     const bo: BrowserOptions = { origin: server.origin, reference, fonts: cfg.fonts ?? [], assetOrigin: cfg.assetOrigin ?? /^https?:\/\/[^/]*\.test(:\d+)?$/, viewportHeight }
 
@@ -114,7 +178,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
     }
 
     const save = (name: string, buf: Buffer | undefined) => {
-      if (!buf) return undefined
+      if (!buf || !keepImages) return undefined
       const file = `img/${String(++imgCount).padStart(4, '0')}-${name}.png`
       writeFileSync(join(reportDir, file), buf)
       return file
@@ -138,30 +202,24 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
       actual: Buffer,
       styleDiffs?: ReturnType<typeof diffStyles>,
       origin?: [number, number],
-      backdrop?: Buffer,
     ) => {
-      let pix = comparePng(expected, actual)
-      let inferred = false
-      let note = ''
-      if (!pix.ok && backdrop) {
-        const b = compareWithBackdrop(expected, backdrop)
-        if (b.ok) {
-          pix = b
-          inferred = true
-        } else if (b.sameSize) {
-          note = ` (with the backdrop inferred from the reference: ${b.diffPixels} px, ${(b.ratio * 100).toFixed(3)} %)`
-          pix = { ...pix, diffPng: b.diffPng ?? pix.diffPng }
-        }
-      }
+      const pix = comparePng(expected, actual)
       const base = { comparison, key: inst.key, instance: inst.instance, viewport: vp, state }
-      const originInfo = { ...(origin ? { origin } : {}), ...(inferred ? { backdropInferred: true } : {}) }
+      const originInfo = origin ? { origin } : {}
       const styleInfo = styleDiffs ? { styleDiffs: styleDiffs.slice(0, 200), styleDiffCount: styleDiffs.length } : {}
       const num = { ...originInfo, diffPixels: pix.diffPixels, totalPixels: pix.totalPixels, ratio: pix.ratio, sizeA: pix.sizeA, sizeB: pix.sizeB }
       if (pix.ok) return record({ ...base, status: 'pass', ...num, ...styleInfo })
       const ex = comparison === 'builder-vs-frontend' ? exemptions[inst.key] : undefined
       const message = pix.sameSize
-        ? `${pix.diffPixels} of ${pix.totalPixels} pixels differ (${(pix.ratio * 100).toFixed(3)} %, limit ${(TOLERANCE.maxDiffPixelRatio * 100).toFixed(1)} %)${note}`
+        ? `${pix.diffPixels} of ${pix.totalPixels} pixels differ (${(pix.ratio * 100).toFixed(3)} %, limit ${(TOLERANCE.maxDiffPixelRatio * 100).toFixed(1)} %)`
         : `size differs: ${comparison === 'builder-vs-frontend' ? 'builder' : comparison === 'frontend-vs-legacy' ? 'frontend' : 'legacy render'} ${pix.sizeB.join('x')} vs ${pix.sizeA.join('x')}`
+      // validate only: a listed instance/viewport whose reference holds page context the excerpt lacks
+      const gapKey = `${inst.key}/${inst.instance}`
+      const gap = comparison === 'reference-vs-legacy' ? contextGaps[gapKey] : undefined
+      if (gap && (!gap.viewports || gap.viewports.includes(vp))) {
+        usedGaps.add(gapKey)
+        return record({ ...base, status: 'context-gap', message: `${message}; context gap: ${gap.reason}`, ...num, ...styleInfo }, pix, expected, actual)
+      }
       if (ex && (!ex.viewports || ex.viewports.includes(vp))) {
         return record({ ...base, status: 'exempt', message: `${message}; exempt: ${ex.reason}`, ...num, ...styleInfo }, pix, expected, actual)
       }
@@ -169,14 +227,16 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
     }
 
     type Job = { inst: InstanceInfo; vp: number }
+    // One pass over the pack at a scrollbar width. The verdict pass is the one at `scrollbar`; the edge pass is informational.
+    const doPass = async (scrollbar: number, vps: number[], wantStyles: boolean) => {
     const jobs: Job[] = []
     for (const k of keys) {
       for (const inst of listInstances(reference, k)) {
         if (opts.mode === 'gate' && !inventory[k]?.frontend) continue
-        for (const vp of viewports) jobs.push({ inst, vp })
+        for (const vp of vps) jobs.push({ inst, vp })
       }
     }
-    log(`${opts.mode}: ${jobs.length} instance/viewport jobs, ${keys.length} block(s), server ${server.origin}`)
+    log(`${opts.mode}: ${jobs.length} instance/viewport jobs at scrollbar ${scrollbar}px, ${keys.length} block(s), server ${server.origin}`)
 
     await pool(jobs, opts.concurrency ?? 4, async ({ inst, vp }) => {
       // states the reference captured at this viewport
@@ -208,7 +268,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
           origin,
           legacyCss: route !== 'legacy' && !!opts.legacyCssOnNew,
           states: st,
-          wantStyles: opts.mode === 'gate',
+          wantStyles: opts.mode === 'gate' && wantStyles,
         })
         // A state's box width may differ per state (it does not today); render each distinct width once.
         const groups = new Map<number | undefined, string[]>()
@@ -229,16 +289,6 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
               : undefined
           const legacy = await render(ctx, problems, bo, spec('legacy', st), fit)
           if (opts.mode === 'validate') {
-            // Elements that are translucent or transparent sit on a backdrop from ancestors that the excerpt lacks:
-            // render them again on a transparent page and infer the backdrop from the reference (only used when the
-            // plain comparison fails).
-            const failing = st.filter((s) => {
-              const r = legacy.states[s]
-              return !('error' in r) && !comparePng(readFileSync(join(inst.dir, pngName(vp, s))), r.png).ok
-            })
-            const clear: Rendered | undefined = failing.length
-              ? await render(ctx, problems, bo, { ...spec('legacy', failing), origin: legacy.origin, transparent: true })
-              : undefined
             for (const s of st) {
               const r = legacy.states[s]
               const f = join(inst.dir, pngName(vp, s))
@@ -246,8 +296,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
                 record({ comparison: 'reference-vs-legacy', key: inst.key, instance: inst.instance, viewport: vp, state: s, status: 'fail', message: r.error })
                 continue
               }
-              const c = clear?.states[s]
-              judge('reference-vs-legacy', inst, vp, s, readFileSync(f), r.png, undefined, legacy.origin, c && !('error' in c) ? c.png : undefined)
+              judge('reference-vs-legacy', inst, vp, s, readFileSync(f), r.png, undefined, legacy.origin)
             }
             continue
           }
@@ -296,6 +345,27 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
         await ctx.close()
       }
     })
+    }
+
+    await doPass(scrollbar, viewports, true)
+
+    // Informational only (Review Focus 1): the verdict pass runs at scrollbar 0, where a container query and a viewport
+    // media query see the same width. Re-run the breakpoint-edge viewports with a classic scrollbar and report both sides.
+    if (opts.mode === 'gate' && opts.edgeReport && scrollbar === 0 && results.length) {
+      const verdict = { results, skipped, images: keepImages }
+      const edgeVps = viewports.filter((v) => EDGES.some(([a, b]) => a === v || b === v))
+      if (edgeVps.length) {
+        results = []
+        skipped = []
+        keepImages = false
+        await doPass(EDGE_SCROLLBAR, edgeVps, false)
+        const differing = results.filter((r) => r.status === 'fail')
+        edge = { scrollbar: EDGE_SCROLLBAR, checks: results.length, differ: differing.length, rows: edgeTable(results), results: differing.slice(0, 200) }
+      }
+      results = verdict.results
+      skipped = verdict.skipped
+      keepImages = verdict.images
+    }
   } finally {
     await browser.close()
     await server.close()
@@ -316,6 +386,18 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
 
   results.sort((a, b) => a.key.localeCompare(b.key) || a.instance.localeCompare(b.instance) || a.viewport - b.viewport || a.state.localeCompare(b.state) || a.comparison.localeCompare(b.comparison))
   const fail = results.filter((r) => r.status === 'fail').length
+
+  // A run that is narrowed or altered in any way is not the contract run, and must not read like one.
+  const partial: string[] = []
+  const sameSet = (a: number[], b: number[]) => a.length === b.length && [...a].sort((x, y) => x - y).every((v, i) => v === [...b].sort((x, y) => x - y)[i])
+  if (!sameSet(viewports, DEFAULT_VIEWPORTS)) partial.push(`viewports narrowed to ${viewports.join(',')} (the contract has ${DEFAULT_VIEWPORTS.length})`)
+  if (keys.length !== allKeys.length) partial.push(`blocks narrowed to ${keys.join(',')} (${allKeys.length} in the reference)`)
+  if (opts.legacyCssOnNew) partial.push('legacy CSS loaded on the new side (identity mode, not a parity result)')
+  if (opts.theme && opts.theme !== (cfg.theme ?? 'default')) partial.push(`theme ${opts.theme} instead of the configured ${cfg.theme ?? 'default'}`)
+  if (scrollbar !== 0) partial.push(`scrollbar ${scrollbar}px (the contract run has 0)`)
+  if (opts.reference && reference !== abs(opts.configDir, cfg.reference ?? 'reference')) partial.push(`reference pack overridden (${reference})`)
+  if (skipped.length) partial.push(`${skipped.length} state/viewport combination(s) skipped, not captured in the reference`)
+
   const summary: RunSummary = {
     mode: opts.mode,
     reference,
@@ -324,8 +406,11 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
     seconds: Math.round((Date.now() - t0) / 100) / 10,
     scrollbar,
     tolerance: TOLERANCE,
-    totals: { checks: results.length, pass: results.filter((r) => r.status === 'pass').length, fail, exempt: results.filter((r) => r.status === 'exempt').length, skipped: skipped.length, missing: missing.length },
+    totals: { checks: results.length, pass: results.filter((r) => r.status === 'pass').length, fail, exempt: results.filter((r) => r.status === 'exempt').length, contextGap: results.filter((r) => r.status === 'context-gap').length, skipped: skipped.length, missing: missing.length },
     missing,
+    partial,
+    unusedContextGaps: Object.keys(contextGaps).filter((k) => !usedGaps.has(k)),
+    ...(edge ? { edgeReport: edge } : {}),
     results,
     skipped,
     ok: fail === 0 && missing.length === 0 && results.length > 0,

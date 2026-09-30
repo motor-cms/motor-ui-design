@@ -68,9 +68,10 @@ function fluid(role: string, prop: 'text' | 'leading', fluidMin: number, fluidMa
 
 function tailwindTheme(base: Tokens): string {
   const lines: string[] = []
-  const map = (namespace: string, group: string, filter: (key: string) => boolean = () => true) => {
+  // `strip`: a key prefix that already is the namespace (motion.ease-base -> --ease-base, not --ease-ease-base)
+  const map = (namespace: string, group: string, filter: (key: string) => boolean = () => true, strip = '') => {
     for (const key of Object.keys(base[group] ?? {})) {
-      if (filter(key)) lines.push(`  --${namespace}-${key}: var(--zrm-${group}-${key});`)
+      if (filter(key)) lines.push(`  --${namespace}-${strip && key.startsWith(strip) ? key.slice(strip.length) : key}: var(--zrm-${group}-${key});`)
     }
   }
   map('color', 'color', (k) => !k.endsWith('-rgb') && !k.startsWith('admin-'))
@@ -79,7 +80,7 @@ function tailwindTheme(base: Tokens): string {
   map('spacing', 'space')
   map('radius', 'radius')
   map('shadow', 'shadow')
-  map('ease', 'motion', (k) => k.startsWith('ease-'))
+  map('ease', 'motion', (k) => k.startsWith('ease-'), 'ease-')
   lines.push(`  --container-page: var(--zrm-container-max);`)
 
   const bp = base.breakpoint ?? {}

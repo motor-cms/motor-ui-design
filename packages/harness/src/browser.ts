@@ -41,8 +41,6 @@ export interface RenderSpec {
   scrollbar: number
   /** load the legacy CSS on frontend/builder as well */
   legacyCss?: boolean
-  /** transparent page background and RGBA screenshots (validate: backdrop inference) */
-  transparent?: boolean
   /** sub-pixel origin of the element inside the page (px, fractional part only) */
   origin?: [number, number]
   states: string[]
@@ -96,17 +94,56 @@ const IMAGES_DONE = async () => {
   return imgs.filter((i) => !(i.complete && i.naturalWidth > 0)).map((i) => i.getAttribute('src') ?? '')
 }
 
+// CSS background images (also on pseudo-elements, and the ones a hover or focus state switches on) load lazily: wait
+// until every one of them has loaded, instead of sleeping a fixed time and hoping.
+export const BG_DONE = async () => {
+  const urls = new Set<string>()
+  for (const e of document.querySelectorAll('#parity-page, #parity-page *')) {
+    for (const pseudo of [null, '::before', '::after']) {
+      const cs = getComputedStyle(e, pseudo)
+      for (const prop of [cs.backgroundImage, cs.maskImage, cs.borderImageSource, cs.listStyleImage, cs.content]) {
+        for (const m of (prop ?? '').matchAll(/url\((["']?)(.*?)\1\)/g)) urls.add(new URL(m[2], document.baseURI).href)
+      }
+    }
+  }
+  const failed: string[] = []
+  await Promise.all(
+    [...urls].map(
+      (u) =>
+        new Promise<void>((res) => {
+          const img = new Image()
+          const done = (ok: boolean) => {
+            if (!ok) failed.push(u)
+            res()
+          }
+          img.onload = () => done(true)
+          img.onerror = () => done(false)
+          setTimeout(() => done(false), 10000)
+          img.src = u
+        }),
+    ),
+  )
+  await new Promise<void>((res) => requestAnimationFrame(() => requestAnimationFrame(() => res())))
+  return [...new Set(failed)]
+}
+
+// The block is everything below #parity-leaf (display: contents): one root element normally, several when a block
+// emits siblings or a fragment. All of them are screenshotted and style-diffed.
 const STYLES = () => {
-  const root = document.querySelector('#parity-leaf > *') as Element | null
-  if (!root) return null
+  const roots = [...(document.getElementById('parity-leaf')?.children ?? [])]
+  if (!roots.length) return null
   const pathOf = (e: Element) => {
     const parts: string[] = []
     let cur: Element | null = e
     while (cur) {
       const parent: Element | null = cur.parentElement
       const tag = cur.tagName.toLowerCase()
-      parts.unshift(cur === root ? tag : `${tag}[${[...(parent as Element).children].indexOf(cur)}]`)
-      if (cur === root) break
+      const ri = roots.indexOf(cur)
+      if (ri >= 0) {
+        parts.unshift(roots.length === 1 ? tag : `${tag}@${ri}`)
+        break
+      }
+      parts.unshift(`${tag}[${[...(parent as Element).children].indexOf(cur)}]`)
       cur = parent
     }
     return parts.join(' > ')
@@ -117,7 +154,7 @@ const STYLES = () => {
     return o
   }
   const out: { path: string; style: Record<string, string> }[] = []
-  for (const e of [root, ...root.querySelectorAll('*')]) {
+  for (const e of roots.flatMap((r) => [r, ...r.querySelectorAll('*')])) {
     out.push({ path: pathOf(e), style: dump(getComputedStyle(e)) })
     for (const pseudo of ['::before', '::after']) {
       const ps = getComputedStyle(e, pseudo)
@@ -129,12 +166,30 @@ const STYLES = () => {
 
 // Same fixed scroll position as the capture: element centred, or top-aligned when taller than the viewport.
 const SCROLL_TO = () => {
-  const el = document.querySelector('#parity-leaf > *') as HTMLElement
-  el.scrollIntoView({ block: el.getBoundingClientRect().height < window.innerHeight ? 'center' : 'start', inline: 'nearest', behavior: 'instant' })
+  const roots = [...document.getElementById('parity-leaf')!.children] as HTMLElement[]
+  if (roots.length === 1) {
+    const el = roots[0]
+    el.scrollIntoView({ block: el.getBoundingClientRect().height < window.innerHeight ? 'center' : 'start', inline: 'nearest', behavior: 'instant' })
+    return
+  }
+  const rects = roots.map((r) => r.getBoundingClientRect())
+  const top = Math.min(...rects.map((r) => r.top)) + window.scrollY
+  const height = Math.max(...rects.map((r) => r.bottom)) + window.scrollY - top
+  window.scrollTo({ top: height < window.innerHeight ? top - (window.innerHeight - height) / 2 : top, behavior: 'instant' })
+}
+
+/** Union of the roots' boxes in document coordinates, rounded outwards (for a screenshot of a multi-root block). */
+const UNION_BOX = () => {
+  const rects = [...document.getElementById('parity-leaf')!.children].map((r) => r.getBoundingClientRect())
+  const x = Math.floor(Math.min(...rects.map((r) => r.left)) + window.scrollX)
+  const y = Math.floor(Math.min(...rects.map((r) => r.top)) + window.scrollY)
+  const right = Math.ceil(Math.max(...rects.map((r) => r.right)) + window.scrollX)
+  const bottom = Math.ceil(Math.max(...rects.map((r) => r.bottom)) + window.scrollY)
+  return { x, y, width: right - x, height: bottom - y }
 }
 
 const FOCUSED_INSIDE = () => {
-  const t = document.querySelector('#parity-leaf > *')
+  const t = document.getElementById('parity-leaf')
   const a = document.activeElement
   return !!t && !!a && a !== document.body && t.contains(a) && a.matches(':focus-visible')
 }
@@ -218,17 +273,25 @@ export const render = async (ctx: BrowserContext, problems: string[], o: Browser
       })
     const err = await page.evaluate(() => (window as any).__parityError as string | undefined)
     if (err) throw new RenderError(`${spec.route} render of ${spec.key}/${spec.instance} at ${spec.viewport}px: ${err}`)
-    await page.addStyleTag({ content: FREEZE_CSS + (spec.transparent ? 'html,body,#parity-page{background:transparent!important}' : '') })
+    await page.addStyleTag({ content: FREEZE_CSS })
 
     const fonts = await page.evaluate(FONT_CHECK, o.fonts)
     if (fonts.problems.length) throw new RenderError(`font check failed (${spec.route} ${spec.key}/${spec.instance} at ${spec.viewport}px): ${fonts.problems.join('; ')}`)
     const notLoaded = await page.evaluate(IMAGES_DONE)
     if (notLoaded.length) throw new RenderError(`images did not load (${spec.route} ${spec.key}/${spec.instance} at ${spec.viewport}px): ${notLoaded.join(', ')}`)
+    const bgFailed = await page.evaluate(BG_DONE)
+    if (bgFailed.length) throw new RenderError(`background images did not load (${spec.route} ${spec.key}/${spec.instance} at ${spec.viewport}px): ${bgFailed.join(', ')}`)
     if (local.length) throw new RenderError(`${spec.route} render of ${spec.key}/${spec.instance} at ${spec.viewport}px: ${local.join('; ')}`)
     if (problems.length) throw new RenderError(problems.join('; '))
 
+    const rootCount = await page.locator('#parity-leaf > *').count()
+    if (rootCount === 0) throw new RenderError(`${spec.route} render of ${spec.key}/${spec.instance} produced no element`)
     const loc = page.locator('#parity-leaf > *').first()
-    if ((await page.locator('#parity-leaf > *').count()) === 0) throw new RenderError(`${spec.route} render of ${spec.key}/${spec.instance} produced no element`)
+    // One root: the element screenshot (as the capture). Several: the union box of all of them, so extra siblings count.
+    const shoot = async () => {
+      if (rootCount === 1) return loc.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', timeout: 30_000 })
+      return page.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', timeout: 30_000, fullPage: true, clip: await page.evaluate(UNION_BOX) })
+    }
     const out: Rendered['states'] = {}
     let origin = spec.origin
     const setOrigin = (x: number, y: number) =>
@@ -243,7 +306,7 @@ export const render = async (ctx: BrowserContext, problems: string[], o: Browser
       for (const c of fit.candidates) {
         await setOrigin(c[0], c[1])
         await page.evaluate(SCROLL_TO)
-        const sc = fit.score(await loc.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', timeout: 30_000 }))
+        const sc = fit.score(await shoot())
         if (sc < best) {
           best = sc
           origin = c
@@ -255,7 +318,6 @@ export const render = async (ctx: BrowserContext, problems: string[], o: Browser
     for (const state of spec.states) {
       await page.mouse.move(0, 0)
       await page.evaluate(SCROLL_TO)
-      await page.waitForTimeout(150)
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.())
       if (state === 'hover') {
         await loc.hover({ timeout: 15_000 })
@@ -271,9 +333,11 @@ export const render = async (ctx: BrowserContext, problems: string[], o: Browser
         continue
       }
       await page.evaluate(SCROLL_TO)
-      await page.waitForTimeout(100)
+      // The state may switch on background images (hover, focus): wait for them and two frames instead of a fixed sleep.
+      const stateBg = await page.evaluate(BG_DONE)
+      if (stateBg.length) throw new RenderError(`background images did not load in state ${state} (${spec.route} ${spec.key}/${spec.instance} at ${spec.viewport}px): ${stateBg.join(', ')}`)
       await page.evaluate(() => document.body.offsetHeight)
-      const png = await loc.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', timeout: 30_000, omitBackground: !!spec.transparent })
+      const png = await shoot()
       const styles = spec.wantStyles ? ((await page.evaluate(STYLES)) as StyleEl[] | null) ?? undefined : undefined
       out[state] = { png, styles }
     }

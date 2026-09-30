@@ -12,8 +12,10 @@ This repo is public and neutral. Read this before writing anything.
 ## Never in this repo
 
 Client names, brand colours, client fonts, page data, screenshots, or anything captured from a local stack
-of a client site. Those belong in the client layer repo. `test/no-client-data.test.ts` fails the build on a
-list of known terms; do not weaken it and do not add files to its allowlist (only the guard itself is allowed).
+of a client site. Those belong in the client layer repo. `test/no-client-data.test.ts` is structural: it fails the
+build on reference packs, screenshots, captured or compiled markup and CSS, and font files (only the synthetic harness
+fixture is exempt). It names no client on purpose; the client names and every client value in every notation are
+checked by the client layer's own test, which scans this repository. Do not weaken either and do not add exemptions.
 Keep the docs neutral too: say "client layer", not the client's name.
 
 ## Branch
