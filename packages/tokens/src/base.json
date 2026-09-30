@@ -1,0 +1,145 @@
+{
+  "color": {
+    "primary-100": "rgb(79, 70, 229)",
+    "primary-90": "rgb(99, 91, 231)",
+    "primary-80": "rgb(129, 122, 236)",
+    "primary-70": "rgb(165, 160, 241)",
+    "primary-50": "rgb(201, 198, 246)",
+    "primary-30": "rgb(228, 226, 251)",
+    "primary-10": "rgb(245, 244, 253)",
+    "primary-100-rgb": "79, 70, 229",
+    "primary-100-alpha-60": "rgba(79, 70, 229, 0.6)",
+    "primary-shade-1": "rgb(67, 56, 202)",
+    "primary-shade-2": "rgb(55, 48, 163)",
+    "clip": "rgb(79, 70, 229)",
+    "bonus": "rgb(79, 70, 229)",
+    "input-fill": "rgba(255, 255, 255, 1)",
+    "btn-primary-hover-bg": "rgba(25, 25, 25, 1)",
+    "gradient-stop-1": "rgba(245, 244, 253, 0.7)",
+    "gradient-stop-2": "rgba(228, 226, 251, 0.7)",
+    "gradient-stop-3": "rgba(201, 198, 246, 0.7)",
+    "gradient-stop-4": "rgba(165, 160, 241, 0.7)",
+    "gradient-stop-5": "rgba(129, 122, 236, 0.7)",
+    "gradient-stop-1-full": "rgba(245, 244, 253, 1)",
+    "gradient-stop-2-full": "rgba(228, 226, 251, 1)",
+    "gradient-stop-3-full": "rgba(201, 198, 246, 1)",
+    "gradient-stop-4-full": "rgba(165, 160, 241, 1)",
+    "gradient-stop-5-full": "rgba(129, 122, 236, 1)",
+    "dark-100": "rgba(25, 25, 25, 1)",
+    "dark-95": "rgba(42, 42, 42, 1)",
+    "dark-90": "rgba(63, 63, 63, 1)",
+    "dark-80": "rgba(108, 108, 108, 1)",
+    "dark-70": "rgba(137, 137, 137, 1)",
+    "dark-60": "rgba(160, 160, 160, 1)",
+    "dark-50": "rgba(179, 179, 179, 1)",
+    "dark-40": "rgba(196, 196, 196, 1)",
+    "dark-30": "rgba(211, 211, 211, 1)",
+    "dark-20": "rgba(225, 225, 225, 1)",
+    "dark-10": "rgba(237, 237, 237, 1)",
+    "dark-5": "rgba(249, 249, 249, 1)",
+    "dark-100-60": "rgba(25, 25, 25, 0.6)",
+    "light-100": "rgba(255, 255, 255, 1)",
+    "light-100-60": "rgba(255, 255, 255, 0.6)",
+    "warning-100": "rgba(220, 38, 38, 1)",
+    "warning-60": "rgba(239, 68, 68, 1)",
+    "warning-50": "rgba(248, 113, 113, 1)",
+    "success-100": "rgba(22, 163, 74, 1)",
+    "success-60": "rgba(34, 197, 94, 1)",
+    "success-50": "rgba(74, 222, 128, 1)",
+    "info-100": "rgba(2, 132, 199, 1)",
+    "info-60": "rgba(14, 165, 233, 1)",
+    "info-50": "rgba(56, 189, 248, 1)",
+    "admin-primary-50": "#EEF2FF",
+    "admin-primary-100": "#E0E7FF",
+    "admin-primary-200": "#C7D2FE",
+    "admin-primary-300": "#A5B4FC",
+    "admin-primary-400": "#818CF8",
+    "admin-primary-500": "#6366F1",
+    "admin-primary-600": "#4F46E5",
+    "admin-primary-700": "#4338CA",
+    "admin-primary-800": "#3730A3",
+    "admin-primary-900": "#312E81",
+    "admin-primary-950": "#1E1B4B"
+  },
+  "font": {
+    "sans": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    "script": "cursive",
+    "mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+  },
+  "text": {
+    "h1-min": "32", "h1-max": "56",
+    "h2-min": "28", "h2-max": "40",
+    "h3-min": "24", "h3-max": "32",
+    "h4-min": "20", "h4-max": "28",
+    "h5-min": "18", "h5-max": "20",
+    "h6-min": "16", "h6-max": "18",
+    "overline-min": "12", "overline-max": "14",
+    "p-min": "16", "p-max": "16"
+  },
+  "leading": {
+    "h1-min": "40", "h1-max": "64",
+    "h2-min": "36", "h2-max": "48",
+    "h3-min": "32", "h3-max": "40",
+    "h4-min": "28", "h4-max": "36",
+    "h5-min": "26", "h5-max": "28",
+    "h6-min": "24", "h6-max": "26",
+    "overline-min": "16", "overline-max": "20",
+    "p-min": "24", "p-max": "24"
+  },
+  "weight": {
+    "light": "300",
+    "regular": "400",
+    "medium": "500",
+    "bold": "700"
+  },
+  "space": {
+    "section-0": "0px",
+    "section-xs": "8px",
+    "section-s": "24px",
+    "section-m": "48px",
+    "section-l": "80px",
+    "section-xl": "120px"
+  },
+  "radius": {
+    "s": "4px",
+    "m": "8px",
+    "l": "12px"
+  },
+  "shadow": {
+    "base": "0 4px 12px 0 rgb(0 0 0 / 10%)",
+    "small": "0 1px 4px 0 rgb(0 0 0 / 20%)"
+  },
+  "border": {
+    "width": "1px",
+    "color": "rgba(137, 137, 137, 1)"
+  },
+  "motion": {
+    "duration-base": "200ms",
+    "duration-slow": "400ms",
+    "ease-base": "ease-in-out"
+  },
+  "z": {
+    "base": "1",
+    "raised": "10",
+    "overlay": "100",
+    "modal": "1000"
+  },
+  "container": {
+    "max": "1280px",
+    "gutter": "24px",
+    "row-gutter": "16px"
+  },
+  "breakpoint": {
+    "sm": "576px",
+    "md": "768px",
+    "lg": "992px",
+    "xl": "1200px",
+    "2xl": "1400px",
+    "vp": "670px",
+    "vpl": "1025px",
+    "vpxl": "1441px",
+    "vpxxl": "1920px",
+    "fluid-min": "576px",
+    "fluid-max": "1200px"
+  }
+}
