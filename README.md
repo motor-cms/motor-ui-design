@@ -23,3 +23,7 @@ pnpm parity    # stub until the harness lands; exits 1
 
 Node 22, pnpm 12. Branches `develop`, `staging`, `production` publish `alpha`, `rc`, `latest` to npmjs
 through the release workflows. A release needs an author-written changeset (`pnpm changeset`).
+
+## CI secrets
+
+Workflows fetch their secrets from the Infisical project `motor-cms-ci` (environment `prod`) via GitHub OIDC, identity `oidc-motor-ui-design`. The repo only stores `INFISICAL_IDENTITY_ID` and `INFISICAL_PROJECT_SLUG`. This repo uses GitHub's immutable OIDC subject (`repo:motor-cms@33766568/motor-ui-design@1397744402:…`). Merge-down mints its token from the GitHub App `motor-cms-ci-bot`.
