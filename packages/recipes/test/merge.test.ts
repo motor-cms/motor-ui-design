@@ -41,6 +41,10 @@ describe('tailwind-merge configuration of the recipes', () => {
     expect(r({ v: 'x' })).toBe('tw:text-dark-100 tw:font-bold tw:mb-0 tw:shadow-small')
   })
 
+  it('a token radius replaces another radius', () => {
+    expect(tv({ base: 'tw:rounded-sm', variants: { v: { x: 'tw:rounded-lg' } } })({ v: 'x' })).toBe('tw:rounded-lg')
+  })
+
   it('a token weight and a token font family do not replace each other', () => {
     expect(tv({ base: 'tw:font-sans tw:font-bold' })()).toBe('tw:font-sans tw:font-bold')
   })
@@ -55,6 +59,7 @@ describe('tailwind-merge configuration of the recipes', () => {
     expect(t.text).toEqual(keys('text', (k) => k.endsWith('-min')).map((k) => k.slice(0, -4)))
     expect(t['font-weight']).toEqual(keys('weight'))
     expect(t.spacing).toEqual(keys('space'))
+    expect(t.radius).toEqual(keys('radius'))
     expect(t.shadow).toEqual(keys('shadow'))
     expect(t.ease).toEqual(keys('motion', (k) => k.startsWith('ease-')).map((k) => k.slice(5)))
   })

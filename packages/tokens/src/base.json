@@ -99,9 +99,9 @@
     "section-xl": "120px"
   },
   "radius": {
-    "s": "4px",
-    "m": "8px",
-    "l": "12px"
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px"
   },
   "shadow": {
     "base": "0 4px 12px 0 rgb(0 0 0 / 10%)",

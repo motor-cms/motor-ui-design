@@ -6,8 +6,8 @@ import { createTV } from 'tailwind-variants'
 // and the token package's entry point pulls in Node modules. `test/merge.test.ts` fails when the lists and the token
 // schema (`base`) drift apart.
 //
-// Not registered: radius. Its keys s and l are also Tailwind's own side utilities (`tw:rounded-s` and `tw:rounded-l` compile to
-// the token radius plus the start/left corner rules), so a recipe must not use those two; `tw:rounded-m` is unambiguous.
+// Radius keys are sm/md/lg: the former s and l were also Tailwind's side utilities (`tw:rounded-s` compiled to the token
+// radius plus the start corner rules).
 // Colours need nothing: any `tw:text-<name>` that is not a registered font-size is a colour.
 export const twMergeConfig = {
   prefix: 'tw',
@@ -17,6 +17,7 @@ export const twMergeConfig = {
       text: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'overline', 'p'],
       'font-weight': ['light', 'regular', 'medium', 'bold'],
       spacing: ['section-0', 'section-xs', 'section-s', 'section-m', 'section-l', 'section-xl'],
+      radius: ['sm', 'md', 'lg'],
       shadow: ['base', 'small'],
       ease: ['base'],
     },

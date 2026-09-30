@@ -35,6 +35,18 @@ describe('theme.css compiled with Tailwind 4', () => {
     expect(css).toMatch(/\.tw\\:ease-base \{[^}]*transition-timing-function: var\(--zrm-motion-ease-base\);/)
   })
 
+  it('radius utilities resolve to the token radius and set all four corners, not one side', async () => {
+    const css = await build(['tw:rounded-sm', 'tw:rounded-md', 'tw:rounded-lg'])
+    for (const k of ['sm', 'md', 'lg']) {
+      expect(css).toMatch(new RegExp(`\\.tw\\\\:rounded-${k} \\{\\s*border-radius: var\\(--zrm-radius-${k}\\);\\s*\\}`))
+    }
+    expect(css).not.toMatch(/border-(start|end|top|bottom|left|right)-/)
+  })
+
+  it('control: a side radius utility does produce corner rules the check above would see', async () => {
+    expect(await build(['tw:rounded-s-md'])).toMatch(/border-(start|end|top|bottom|left|right)-/)
+  })
+
   it('a @md/page: container variant uses the page container at the md breakpoint', async () => {
     const css = await build(['tw:@md/page:p-section-s'])
     expect(css).toMatch(/@container page \(width >= 768px\) \{\s*\.tw\\:\\@md\\\/page\\:p-section-s \{\s*padding: var\(--zrm-space-section-s\);/)
