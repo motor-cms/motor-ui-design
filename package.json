@@ -1,0 +1,23 @@
+{
+  "name": "motor-ui-design",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "packageManager": "pnpm@12.6.0",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm build && vitest run",
+    "parity": "node scripts/parity.mjs",
+    "changeset": "changeset"
+  },
+  "devDependencies": {
+    "@motor-cms/ui-design-tokens": "workspace:*",
+    "@motor-cms/ui-design-recipes": "workspace:*",
+    "@motor-cms/ui-design-styles": "workspace:*",
+    "@motor-cms/ui-design-blocks": "workspace:*",
+    "@motor-cms/ui-design-harness": "workspace:*",
+    "@changesets/cli": "^2.29.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.4"
+  }
+}

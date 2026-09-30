@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+    branches: [develop, staging, production]
+  pull_request:
+    branches: [develop, staging, production]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    # Skip bot commits (version bumps, merge-downs)
+    if: >-
+      github.event_name == 'pull_request' ||
+      (
+        !startsWith(github.event.head_commit.message, 'chore: version packages') &&
+        !startsWith(github.event.head_commit.message, 'Merge remote-tracking branch')
+      )
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and test
+        run: pnpm test

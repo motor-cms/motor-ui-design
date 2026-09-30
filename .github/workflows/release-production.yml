@@ -1,0 +1,151 @@
+name: Release (Production)
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - 'packages/**'
+  workflow_dispatch:
+
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Version & Publish
+    runs-on: ubuntu-latest
+
+    # Skip bot commits (version bumps, merge-downs)
+    if: >-
+      !startsWith(github.event.head_commit.message, 'chore: version packages') &&
+      !startsWith(github.event.head_commit.message, 'Merge remote-tracking branch')
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and test
+        run: pnpm test
+
+      # --- Decide whether to release ---
+      # Only an author-written changeset releases. This workflow never writes
+      # one (a stale auto changeset caused the 409 on 3.0.0-rc.0 in
+      # motor-adminfrontend-zeitraumdev, 2026-09-30).
+      - name: Check for changesets
+        id: changesets
+        run: |
+          CHANGESETS=$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null | head -1)
+          if [ -n "$CHANGESETS" ]; then
+            echo "has_changesets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changesets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Second guard behind the `paths:` filter: packages/ must differ from the
+      # last release tag. The tag comes from `git tag --list`, never from
+      # `git describe` (which finds the nearest tag of any kind).
+      - name: Check packages changed since last release tag
+        id: pkgs
+        run: |
+          LAST_TAG=$(git tag --list '@motor-cms/ui-design-*' --sort=-creatordate | head -1)
+          CHANGED=true
+          if [ -n "$LAST_TAG" ]; then
+            echo "Last release tag: $LAST_TAG"
+            if ! git diff --name-only "$LAST_TAG"..HEAD -- 'packages/' | grep -q .; then
+              CHANGED=false
+            fi
+          else
+            echo "No release tag yet"
+          fi
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      # --- Version, publish, commit ---
+      - name: Version packages
+        if: steps.changesets.outputs.has_changesets == 'true' && steps.pkgs.outputs.changed == 'true'
+        id: version
+        run: |
+          pnpm changeset version
+          echo "versioned=true" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch npm token from Infisical (OIDC, no stored token)
+        if: steps.changesets.outputs.has_changesets == 'true' && steps.pkgs.outputs.changed == 'true'
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: oidc
+          domain: https://secrets.tastatur-und-maus.net
+          identity-id: ${{ secrets.INFISICAL_IDENTITY_ID }}
+          project-slug: ${{ secrets.INFISICAL_PROJECT_SLUG }}
+          env-slug: prod
+          secret-path: /
+        # exports NPM_TOKEN to the job env for the publish step
+      - name: Publish to npm
+        if: steps.version.outputs.versioned == 'true'
+        id: publish
+        run: |
+          set -e
+          FAILED=()
+          for pkg in packages/*; do
+            NAME=$(node -p "require('./$pkg/package.json').name")
+            VERSION=$(node -p "require('./$pkg/package.json').version")
+            echo "::group::Publishing $NAME@$VERSION"
+            if ( cd "$pkg" && pnpm publish --access public --tag latest --no-git-checks ); then
+              echo "ok $NAME@$VERSION"
+            else
+              echo "failed $NAME@$VERSION"
+              FAILED+=("$NAME@$VERSION")
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo "::error::Packages failed to publish: ${FAILED[*]}"
+            exit 1
+          fi
+          echo "published=true" >> "$GITHUB_OUTPUT"
+        env:
+          NPM_TOKEN: ${{ env.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
+
+      - name: Commit and push version bump
+        if: steps.publish.outputs.published == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: version packages"
+            git push || { echo "::error::Failed to push version commit"; exit 1; }
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub releases
+        if: steps.publish.outputs.published == 'true'
+        run: |
+          for pkg in packages/*; do
+            NAME=$(node -p "require('./$pkg/package.json').name")
+            VERSION=$(node -p "require('./$pkg/package.json').version")
+            TAG="${NAME}@${VERSION}"
+            gh release create "$TAG" --title "$TAG" --generate-notes 2>/dev/null || true
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

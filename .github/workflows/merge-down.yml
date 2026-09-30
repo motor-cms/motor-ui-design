@@ -1,0 +1,201 @@
+name: Merge Down
+
+on:
+  workflow_run:
+    workflows: ["Release (Production)"]
+    types: [completed]
+    branches: [production]
+  push:
+    branches: [staging]
+
+concurrency:
+  group: merge-down
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # OIDC -> Infisical for the motor-cms-ci-bot App key (no stored PAT_TOKEN)
+
+jobs:
+  merge-down:
+    name: Cascade merge
+    runs-on: ubuntu-latest
+
+    # Skip bot commits on staging (merge-downs, version bumps)
+    if: >-
+      github.event_name == 'workflow_run' ||
+      (
+        github.event_name == 'push' &&
+        !startsWith(github.event.head_commit.message, 'Merge remote-tracking branch') &&
+        !startsWith(github.event.head_commit.message, 'chore: version packages')
+      )
+
+    steps:
+      # Keyless cross-branch auth: OIDC -> Infisical for the motor-cms-ci-bot App
+      # key, then a 1h installation token (Contents+PRs write). An App token (unlike
+      # GITHUB_TOKEN) still triggers the downstream release.yml on the merged-down
+      # branches — preserving the old PAT_TOKEN behaviour. Replaces revoked PAT_TOKEN.
+      - name: Fetch GitHub App creds from Infisical (OIDC, no stored token)
+        uses: Infisical/secrets-action@v1.0.7
+        with:
+          method: oidc
+          domain: https://secrets.tastatur-und-maus.net
+          identity-id: ${{ secrets.INFISICAL_IDENTITY_ID }}
+          project-slug: ${{ secrets.INFISICAL_PROJECT_SLUG }}
+          env-slug: prod
+          secret-path: /
+      - name: Mint short-lived motor-cms-ci-bot App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.GH_APP_ID }}
+          private-key: ${{ env.GH_APP_PRIVATE_KEY }}
+          owner: motor-cms
+          repositories: motor-ui-design
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine source branch
+        id: source
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "branch=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge production → staging
+        id: to-staging
+        if: steps.source.outputs.branch == 'production'
+        run: |
+          set -e
+          git fetch origin production staging
+          git checkout staging
+          git merge origin/production --no-edit 2>&1 && MERGED=true || MERGED=false
+
+          if [ "$MERGED" = "true" ]; then
+            git push origin staging
+            echo "result=merged" >> "$GITHUB_OUTPUT"
+          else
+            # Auto-resolve version/changelog conflicts by matching filenames
+            CONFLICT_FILES=$(git diff --name-only --diff-filter=U)
+            HAS_VERSION_CONFLICT=false
+
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              case "$file" in
+                */package.json|pnpm-lock.yaml|.changeset/pre.json|*/CHANGELOG.md|CHANGELOG.md)
+                  echo "Auto-resolving conflict in $file (keeping ours)"
+                  git checkout --ours "$file"
+                  git add "$file"
+                  HAS_VERSION_CONFLICT=true
+                  ;;
+              esac
+            done <<< "$CONFLICT_FILES"
+
+            # Check if there are still unresolved conflicts (code conflicts)
+            REMAINING=$(git diff --name-only --diff-filter=U | head -1)
+            if [ -n "$REMAINING" ]; then
+              echo "Unresolved code conflicts: $(git diff --name-only --diff-filter=U)"
+              echo "result=conflict" >> "$GITHUB_OUTPUT"
+              git merge --abort
+            elif [ "$HAS_VERSION_CONFLICT" = "true" ]; then
+              if ! pnpm install --lockfile-only; then
+                echo "::warning::Failed to update lockfile, continuing without it"
+              fi
+              git add pnpm-lock.yaml 2>/dev/null || true
+              git commit --no-edit
+              git push origin staging || { echo "::error::Failed to push to staging"; exit 1; }
+              echo "result=merged" >> "$GITHUB_OUTPUT"
+            else
+              echo "result=conflict" >> "$GITHUB_OUTPUT"
+              git merge --abort
+            fi
+          fi
+
+      - name: Open PR on production → staging conflict
+        if: steps.source.outputs.branch == 'production' && steps.to-staging.outputs.result == 'conflict'
+        run: |
+          EXISTING=$(gh pr list --base staging --head production --json number --jq '.[0].number')
+          if [ -z "$EXISTING" ]; then
+            gh pr create --base staging --head production \
+              --title "Merge production → staging" \
+              --body "Automatic merge-down could not fast-forward. Version conflicts were auto-resolved but code conflicts remain. Please resolve and merge manually."
+          fi
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Merge staging → develop
+        id: to-develop
+        if: >-
+          always() &&
+          (steps.source.outputs.branch == 'staging' || steps.to-staging.outputs.result == 'merged')
+        run: |
+          set -e
+          git fetch origin staging develop
+          git checkout develop
+          git merge origin/staging --no-edit 2>&1 && MERGED=true || MERGED=false
+
+          if [ "$MERGED" = "true" ]; then
+            git push origin develop
+            echo "result=merged" >> "$GITHUB_OUTPUT"
+          else
+            CONFLICT_FILES=$(git diff --name-only --diff-filter=U)
+            HAS_VERSION_CONFLICT=false
+
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              case "$file" in
+                */package.json|pnpm-lock.yaml|.changeset/pre.json|*/CHANGELOG.md|CHANGELOG.md)
+                  echo "Auto-resolving conflict in $file (keeping ours)"
+                  git checkout --ours "$file"
+                  git add "$file"
+                  HAS_VERSION_CONFLICT=true
+                  ;;
+              esac
+            done <<< "$CONFLICT_FILES"
+
+            REMAINING=$(git diff --name-only --diff-filter=U | head -1)
+            if [ -n "$REMAINING" ]; then
+              echo "Unresolved code conflicts: $(git diff --name-only --diff-filter=U)"
+              echo "result=conflict" >> "$GITHUB_OUTPUT"
+              git merge --abort
+            elif [ "$HAS_VERSION_CONFLICT" = "true" ]; then
+              if ! pnpm install --lockfile-only; then
+                echo "::warning::Failed to update lockfile, continuing without it"
+              fi
+              git add pnpm-lock.yaml 2>/dev/null || true
+              git commit --no-edit
+              git push origin develop || { echo "::error::Failed to push to develop"; exit 1; }
+              echo "result=merged" >> "$GITHUB_OUTPUT"
+            else
+              echo "result=conflict" >> "$GITHUB_OUTPUT"
+              git merge --abort
+            fi
+          fi
+
+      - name: Open PR on staging → develop conflict
+        if: always() && steps.to-develop.outputs.result == 'conflict'
+        run: |
+          EXISTING=$(gh pr list --base develop --head staging --json number --jq '.[0].number')
+          if [ -z "$EXISTING" ]; then
+            gh pr create --base develop --head staging \
+              --title "Merge staging → develop" \
+              --body "Automatic merge-down could not fast-forward. Version conflicts were auto-resolved but code conflicts remain. Please resolve and merge manually."
+          fi
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
