@@ -16,6 +16,9 @@ const PACK_DIR = /(^|\/)(reference|_assets|_definitions|_images)\//
 const PACK_FILE = /(^|\/)(outer(-\d+)?\.html|capture\.json|fixture\.json|frontend(\.[\w-]+)?\.css)$/
 // The harness page itself is the only other HTML document.
 const HTML_ALLOWED = new Set(['packages/harness/app/index.html'])
+// Hand-written generic sheets of the styles package (DECISIONS 6: stored helper classes such as fw-*), top level only.
+// Their values are checked by the private layer's scan like every other file here.
+const STYLES_SRC_CSS = /^packages\/styles\/src\/[^/]+\.css$/
 
 const violations = (files: string[]): string[] => {
   const out: string[] = []
@@ -26,7 +29,7 @@ const violations = (files: string[]): string[] => {
     if (SCREENSHOT.test(f)) why.push('image/screenshot')
     if (FONT.test(f)) why.push('font file')
     if (/\.html?$/i.test(f) && !HTML_ALLOWED.has(f)) why.push('captured or compiled HTML')
-    if (/\.css$/i.test(f)) why.push('compiled CSS')
+    if (/\.css$/i.test(f) && !STYLES_SRC_CSS.test(f)) why.push('compiled CSS')
     if (why.length) out.push(`${f}: ${why.join(', ')}`)
   }
   return out
@@ -46,12 +49,12 @@ describe('core carries no client data (structural)', () => {
     expect(candidateFiles().length).toBeGreaterThan(5)
   })
 
-  it('has no reference pack, screenshot, captured markup, compiled CSS or font file outside the synthetic fixture', () => {
+  it('has no reference pack, screenshot, captured markup, compiled CSS or font file outside the synthetic fixture and the styles sources', () => {
     const hits = violations(candidateFiles())
     expect(hits, `client-shaped data found:\n${hits.join('\n')}`).toEqual([])
   })
 
-  it('break-it: the predicate flags every shape and spares the synthetic fixture and the harness page', () => {
+  it('break-it: the predicate flags every shape and spares the synthetic fixture, the harness page and the styles sources', () => {
     const bad = [
       'reference/ButtonAtom/abc/outer.html',
       'packages/x/reference/ButtonAtom/abc/375.png',
@@ -62,6 +65,10 @@ describe('core carries no client data (structural)', () => {
       'somewhere/capture.json',
       'somewhere/frontend.css',
       '_assets/_nuxt/entry.css',
+      'packages/styles/dist/weights.css',
+      'packages/styles/src/captured/frontend-page.css',
+      'packages/blocks/src/weights.css',
+      'packages/styles/src/frontend.css',
     ]
     for (const f of bad) expect(violations([f]), f).toHaveLength(1)
     const ok = [
@@ -69,6 +76,7 @@ describe('core carries no client data (structural)', () => {
       'packages/harness/test/fixture/reference/frontend.css',
       'packages/harness/test/fixture/theme.css',
       'packages/harness/app/index.html',
+      'packages/styles/src/weights.css',
       'packages/tokens/src/base.json',
       'README.md',
     ]
