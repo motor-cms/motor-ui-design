@@ -65,9 +65,9 @@ code{background:#f3f3f3;padding:0 3px}details{margin:6px 0}</style>`)
   const withContainer = s.results.filter((r) => r.container && r.comparison !== 'builder-vs-frontend')
   if (withContainer.length) {
     h.push('<h2>Container mode</h2><p>In the legacy render the listed children were replaced by neutral placeholder boxes of exactly their measured border-box size (margins kept); the new render got the same boxes. The container\'s own markup and its pilot children are compared normally. The foreign content itself is not compared.</p>')
-    h.push('<table><tr><th>block</th><th>instance</th><th>viewport</th><th>replaced children (id: width x height)</th></tr>')
+    h.push('<table><tr><th>block</th><th>instance</th><th>viewport</th><th>replaced children (id: width x height at x,y)</th></tr>')
     for (const r of withContainer.filter((x, i, a) => a.findIndex((y) => y.key === x.key && y.instance === x.instance && y.viewport === x.viewport) === i)) {
-      h.push(`<tr><td>${esc(r.key)}</td><td>${esc(r.instance)}</td><td>${r.viewport}</td><td>${r.container!.replaced.map((b) => `<code>${esc(b.id)}</code>: ${b.width} x ${b.height}`).join('<br>') || 'none'}</td></tr>`)
+      h.push(`<tr><td>${esc(r.key)}</td><td>${esc(r.instance)}</td><td>${r.viewport}</td><td>${r.container!.replaced.map((b) => `<code>${esc(b.id)}</code>: ${b.width} x ${b.height} at ${b.x},${b.y}`).join('<br>') || 'none'}</td></tr>`)
     }
     h.push('</table>')
   }

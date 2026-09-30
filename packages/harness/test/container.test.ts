@@ -41,6 +41,9 @@ const containers: NonNullable<ParityConfig['containers']> = {
   PanelBlock: {
     foreign: (fx: any, ctx) => fx.node.children.filter((c: any) => !ctx.implemented.includes(c.block)).map((c: any) => ({ id: c.id, selector: c.id === 'media' ? '.alien--media' : '.alien--text' })),
   },
+  BadgeBlock: {
+    foreign: (fx: any, ctx) => fx.node.children.filter((c: any) => !ctx.implemented.includes(c.block)).map((c: any) => ({ id: c.id, selector: c.selector })),
+  },
   GridBlock: {
     foreign: (fx: any, ctx) => fx.node.children.filter((c: any) => !ctx.implemented.includes(c.block)).map((c: any) => ({ id: c.id, selector: c.selector })),
   },
@@ -74,10 +77,12 @@ describe('container mode: a foreign child does not make the instance fail, the f
     expect(failed(r), JSON.stringify(failed(r).map((x) => [x.key, x.viewport, x.comparison, x.message]))).toEqual([])
     expect(r.ok).toBe(true)
     // every comparison of a container block carries the boxes that were replaced
-    for (const key of ['PanelBlock', 'GridBlock']) {
+    for (const key of ['PanelBlock', 'GridBlock', 'BadgeBlock']) {
       const rs = r.results.filter((x) => x.key === key)
       expect(rs.length).toBe(VPS.length * 2)
       for (const x of rs) expect((x as any).container?.replaced.length, `${key} @${x.viewport}`).toBe(key === 'PanelBlock' ? 2 : 1)
+      // offset of the placeholder inside the container's border box: padding 150px 16px plus the 40px margin
+      if (key === 'BadgeBlock') for (const x of rs) expect(box(x, 'dot'), `@${x.viewport}`).toMatchObject({ x: 56, y: 150, width: 8, height: 8 })
     }
     const panel = (vp: number) => front(r, 'PanelBlock').find((x) => x.viewport === vp)!
     expect(box(panel(375), 'media')).toMatchObject({ id: 'media', index: 0, height: 144 })
@@ -98,8 +103,8 @@ describe('container mode: a foreign child does not make the instance fail, the f
     const s = setup('control')
     const r = await go(s, { containers: undefined })
     const f = front(r).filter((x) => x.status === 'fail')
-    expect(new Set(f.map((x) => x.key))).toEqual(new Set(['PanelBlock', 'GridBlock']))
-    expect(f.length).toBe(VPS.length * 2)
+    expect(new Set(f.map((x) => x.key))).toEqual(new Set(['PanelBlock', 'GridBlock', 'BadgeBlock']))
+    expect(f.length).toBe(VPS.length * 3)
     for (const x of f) expect((x as any).container).toBeUndefined()
     expect(front(r, 'PlainBlock').every((x) => x.status === 'pass')).toBe(true)
   }, 240_000)
@@ -158,6 +163,20 @@ describe('container mode: break-its, each must fail', () => {
     for (const x of f) expect(x.message).toMatch(/placeholder 0 \(media\) is missing in the new render/)
   }, 240_000)
 
+  it('(e) a placeholder moved 1 px on the new side, size kept: fails on the position check although the pixels alone pass', async () => {
+    const s = setup('e-shift')
+    const r = await go(s, { blockMap: 'block-map.shifted.ts' }, { blocks: ['BadgeBlock'] })
+    const f = failed(r).filter((x) => x.comparison === 'frontend-vs-legacy')
+    expect(f.length).toBe(VPS.length)
+    for (const x of f) {
+      expect(x.message).toMatch(/^container mode: placeholder 0 \(dot\) is at 57,150 in the new render, measured at 56,150 in the legacy render$/)
+      // the pixel comparison on its own is within the tolerance: same size, under 0.1 % of the pixels
+      expect(x.sizeA).toEqual(x.sizeB)
+      expect(x.ratio!, `@${x.viewport}`).toBeGreaterThan(0)
+      expect(x.ratio!).toBeLessThanOrEqual(0.001)
+    }
+  }, 240_000)
+
   it('(d) the foreign child is taller in legacy and pushes the pilot child down: a new render that misplaces the pilot child fails', async () => {
     const s = setup('d-shift', (d) => edit(d, 'blocks/PanelBlock.vue', '.blk-pilot--after { margin-top: 10px; }', '.blk-pilot--after { margin-top: 0; }'))
     const r = await go(s, {}, { blocks: ['PanelBlock'] })
@@ -174,7 +193,7 @@ describe('container mode: scope and configuration', () => {
     const s = setup('validate')
     const browser = await chromium.launch()
     try {
-      for (const [key, inst] of [['PanelBlock', 'panel-1'], ['GridBlock', 'grid-1'], ['PlainBlock', 'plain-1']]) {
+      for (const [key, inst] of [['PanelBlock', 'panel-1'], ['GridBlock', 'grid-1'], ['BadgeBlock', 'badge-1'], ['PlainBlock', 'plain-1']]) {
         const dir = join(s.reference, key, inst)
         const css = readFileSync(join(s.reference, 'frontend.css'), 'utf8')
         const html = readFileSync(join(dir, 'outer.html'), 'utf8')
@@ -190,7 +209,7 @@ describe('container mode: scope and configuration', () => {
     }
     const r = await go(s, {}, {}, 'validate')
     expect(failed(r), JSON.stringify(failed(r).map((x) => x.message))).toEqual([])
-    expect(r.results.length).toBe(VPS.length * 3)
+    expect(r.results.length).toBe(VPS.length * 4)
     for (const x of r.results) expect((x as any).container).toBeUndefined()
   }, 240_000)
 

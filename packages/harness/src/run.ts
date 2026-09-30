@@ -309,7 +309,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
           measured = legacy.foreign
           const info = (rendered: { containerProblems?: string[] }) =>
             measured
-              ? { info: { replaced: measured.map(({ id, index, selector, width, height, margin }) => ({ id, index, selector, width, height, margin })) }, problems: rendered.containerProblems ?? [] }
+              ? { info: { replaced: measured.map(({ id, index, selector, x, y, width, height, margin }) => ({ id, index, selector, x, y, width, height, margin })) }, problems: rendered.containerProblems ?? [] }
               : undefined
           if (opts.mode === 'validate') {
             for (const s of st) {

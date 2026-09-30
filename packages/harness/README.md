@@ -105,14 +105,15 @@ export default defineConfig({
   not change. Nested matches: the outermost element wins. A selector that matches nothing, is invalid, matches the block root or
   a `display: contents` element is a harness error (exit 2), not a silent pass.
 - **Adapter contract.** `ctx.foreign` (in `props` and `slots`) lists the measured boxes in document order:
-  `{ id, index, selector, width, height, margin, layout, html }`. `html` is the placeholder markup, identical to the legacy
+  `{ id, index, selector, x, y, width, height, margin, layout, html }` (`x`, `y` = offset from the container root's border box). `html` is the placeholder markup, identical to the legacy
   one. Put it where the foreign child sits, unchanged: `slots: (fx, ctx) => ({ body: ctx.foreign.filter((b) => b.id === 'x').map((b) => b.html).join('') + ... })`.
   `ctx.foreign` is `[]` for a block that is not a configured container.
 - **What is compared.** Everything else as before: pixels and size at the usual tolerances (0.1 % of the pixels, size exactly)
   of the whole block, placeholders included, so a container that mispositions a pilot child, changes a gutter or a column
   width, or pads differently fails. On top of that the new render is checked for every placeholder: it must be present exactly
-  once (`data-parity-foreign`) and have the measured size (0.05 px). A missing, duplicated or resized placeholder fails the
-  check with `container mode: placeholder <n> (<id>) ...` even where the pixels stay under the tolerance.
+  once (`data-parity-foreign`), have the measured size (0.05 px) and sit at the measured offset from the container root's
+  border box (0.5 px, per viewport and state). A missing, duplicated, resized or moved placeholder fails the check with
+  `container mode: placeholder <n> (<id>) ...`, naming both sizes or both offsets, even where the pixels stay under the tolerance.
 - **What is not compared.** The inside of a foreign child (its markup, text, images, CSS) and its absolutely positioned or
   overflowing descendants. Its size and margins are taken from the legacy render, so a container cannot be wrong about them.
 - **Report.** Every `frontend-vs-legacy` and `builder-vs-frontend` result of a container instance carries

@@ -29,7 +29,10 @@ export interface ForeignBox {
   /** Position among the instance's foreign children in document order. */
   index: number
   selector: string
-  /** Border box, px. */
+  /** Offset of the border box from the container root's border box (top left), px. */
+  x: number
+  y: number
+  /** Border box size, px. */
   width: number
   height: number
   /** Computed margin, css shorthand (top right bottom left). */
@@ -42,7 +45,7 @@ export interface ForeignBox {
 
 /** What a container instance reports: the children that were replaced (html and layout left out). */
 export interface ContainerInfo {
-  replaced: Pick<ForeignBox, 'id' | 'index' | 'selector' | 'width' | 'height' | 'margin'>[]
+  replaced: Pick<ForeignBox, 'id' | 'index' | 'selector' | 'x' | 'y' | 'width' | 'height' | 'margin'>[]
 }
 
 export interface ContainerSpec {

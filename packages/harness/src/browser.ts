@@ -220,6 +220,7 @@ const MEASURE_FOREIGN = (entries: { id: string; selector: string }[]) => {
   const kept = found.filter((f) => !found.some((o) => o.el !== f.el && o.el.contains(f.el)))
   kept.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
   const DEFAULTS: Record<string, string> = { position: 'static', float: 'none', clear: 'none', 'vertical-align': 'baseline', 'align-self': 'auto', 'justify-self': 'auto', order: '0', 'grid-column-start': 'auto', 'grid-column-end': 'auto', 'grid-row-start': 'auto', 'grid-row-end': 'auto' }
+  const rootRect = roots[0].getBoundingClientRect()
   const boxes = []
   for (let i = 0; i < kept.length; i++) {
     const { el, id, selector } = kept[i]
@@ -232,7 +233,7 @@ const MEASURE_FOREIGN = (entries: { id: string; selector: string }[]) => {
     for (const k of Object.keys(DEFAULTS)) if (cs.getPropertyValue(k) !== DEFAULTS[k]) layout[k] = cs.getPropertyValue(k)
     if (cs.position !== 'static') for (const k of ['top', 'right', 'bottom', 'left']) if (cs.getPropertyValue(k) !== 'auto') layout[k] = cs.getPropertyValue(k)
     el.setAttribute('data-parity-measure', String(i))
-    boxes.push({ id, index: i, selector, width: r.width, height: r.height, margin: `${cs.marginTop} ${cs.marginRight} ${cs.marginBottom} ${cs.marginLeft}`, layout })
+    boxes.push({ id, index: i, selector, x: r.left - rootRect.left, y: r.top - rootRect.top, width: r.width, height: r.height, margin: `${cs.marginTop} ${cs.marginRight} ${cs.marginBottom} ${cs.marginLeft}`, layout })
   }
   return { boxes }
 }
@@ -248,8 +249,9 @@ const REPLACE_FOREIGN = (items: { index: number; html: string }[]) => {
 }
 
 // Container mode, new side: every placeholder handed over must be in the render exactly once, at the measured size.
-const CHECK_PLACEHOLDERS = (expected: { index: number; id: string; width: number; height: number }[]) => {
+const CHECK_PLACEHOLDERS = (expected: { index: number; id: string; x: number; y: number; width: number; height: number }[]) => {
   const leaf = document.getElementById('parity-leaf')!
+  const rootRect = leaf.children[0]?.getBoundingClientRect()
   const els = [...leaf.querySelectorAll('[data-parity-foreign]')]
   const problems: string[] = []
   const fmt = (n: number) => String(Math.round(n * 1000) / 1000)
@@ -261,6 +263,12 @@ const CHECK_PLACEHOLDERS = (expected: { index: number; id: string; width: number
       const r = m[0].getBoundingClientRect()
       if (Math.abs(r.width - e.width) > 0.05 || Math.abs(r.height - e.height) > 0.05) {
         problems.push(`placeholder ${e.index} (${e.id}) is ${fmt(r.width)}x${fmt(r.height)} in the new render, measured ${fmt(e.width)}x${fmt(e.height)} in the legacy render`)
+      }
+      // offset inside the container's border box (first root), within 0.5 px
+      const x = r.left - (rootRect?.left ?? 0)
+      const y = r.top - (rootRect?.top ?? 0)
+      if (Math.abs(x - e.x) > 0.5 || Math.abs(y - e.y) > 0.5) {
+        problems.push(`placeholder ${e.index} (${e.id}) is at ${fmt(x)},${fmt(y)} in the new render, measured at ${fmt(e.x)},${fmt(e.y)} in the legacy render`)
       }
     }
   }

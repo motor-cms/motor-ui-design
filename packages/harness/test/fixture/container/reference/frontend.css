@@ -11,3 +11,5 @@ body { margin: 0; font: 16px/1.5 sans-serif; color: #222; }
 @media (min-width: 768px) {
   .grid__col--a { flex-grow: 2; }
 }
+.badge-box { padding: 150px 16px; background: #e8f0e8; }
+.alien--dot { box-sizing: border-box; width: 8px; height: 8px; padding: 0; border: 0; margin: 0 0 0 40px; }

@@ -26,6 +26,12 @@ export default {
       b: pilot('', fx.node.children.find((c) => c.id === 'b')!.text!),
     }),
   },
+  BadgeBlock: {
+    frontend: () => import('./blocks/BadgeBlock.vue'),
+    builder: () => import('./blocks/BadgeBlock.vue'),
+    props: () => ({}),
+    slots: (_fx: unknown, ctx: { foreign: { id: string; html: string }[] }) => ({ dot: placeholders(ctx, 'dot') }),
+  },
   PlainBlock: {
     frontend: () => import('./blocks/PlainBlock.vue'),
     builder: () => import('./blocks/PlainBlock.vue'),

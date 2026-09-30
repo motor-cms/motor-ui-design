@@ -1,0 +1,17 @@
+{
+ "block": "BadgeBlock",
+ "instance": "badge-1",
+ "host": "neutral",
+ "states": [
+  "default"
+ ],
+ "node": {
+  "children": [
+   {
+    "block": "AlienDot",
+    "id": "dot",
+    "selector": ".alien--dot"
+   }
+  ]
+ }
+}
