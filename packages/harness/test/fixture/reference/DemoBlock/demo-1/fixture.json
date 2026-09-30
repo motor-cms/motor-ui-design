@@ -1,0 +1,13 @@
+{
+ "block": "DemoBlock",
+ "instance": "demo-1",
+ "host": "neutral",
+ "states": [
+  "default",
+  "hover"
+ ],
+ "node": {
+  "title": "Demo title",
+  "text": "Demo body text that is long enough to wrap onto a second line when the box is narrow."
+ }
+}

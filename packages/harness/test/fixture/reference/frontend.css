@@ -1,0 +1,10 @@
+/* Legacy page CSS of the synthetic fixture: neutral values, viewport media queries. */
+body { margin: 0; font: 16px/1.5 sans-serif; color: #222; }
+.demo { padding: 8px 12px; background: #e8e8f0; }
+.demo__title { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
+.demo__text { margin: 0; }
+.demo:hover { background: #d8d8ec; }
+@media (min-width: 768px) {
+  .demo { padding: 16px 24px; }
+}
+.plain { padding: 6px 10px; background: #f0e8e8; }

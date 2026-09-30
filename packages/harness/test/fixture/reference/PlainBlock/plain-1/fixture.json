@@ -1,0 +1,11 @@
+{
+ "block": "PlainBlock",
+ "instance": "plain-1",
+ "host": "neutral",
+ "states": [
+  "default"
+ ],
+ "node": {
+  "text": "Plain block text"
+ }
+}

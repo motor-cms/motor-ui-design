@@ -9,7 +9,7 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "test": "pnpm build && vitest run",
-    "parity": "node scripts/parity.mjs",
+    "parity": "pnpm build && node packages/harness/dist/cli.js --config packages/harness/test/fixture/parity.config.mjs --mode gate",
     "changeset": "changeset"
   },
   "devDependencies": {

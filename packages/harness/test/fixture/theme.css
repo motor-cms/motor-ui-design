@@ -1,0 +1,3 @@
+/* Theme of the synthetic new implementation: neutral values. */
+:root { --demo-bg: #e8e8f0; --demo-bg-hover: #d8d8ec; --demo-pad: 8px 12px; --demo-pad-wide: 16px 24px; }
+body { margin: 0; font: 16px/1.5 sans-serif; color: #222; }

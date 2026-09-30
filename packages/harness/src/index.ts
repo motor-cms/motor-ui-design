@@ -1,2 +1,5 @@
-// Entry point only; the real content arrives in a later task.
 export const packageName = '@motor-cms/ui-design-harness'
+export { defineConfig } from './types.js'
+export type { BlockEntry, BlockMap, ParityConfig, PropsContext, Exemptions, RunSummary, CheckResult } from './types.js'
+export { run } from './run.js'
+export { comparePng, diffStyles, TOLERANCE } from './compare.js'
