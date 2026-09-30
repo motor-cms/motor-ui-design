@@ -11,9 +11,17 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "tailwind-merge": "^3.7.0",
+    "tailwind-variants": "^3.3.1"
+  }
 }

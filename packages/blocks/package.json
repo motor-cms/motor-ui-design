@@ -9,11 +9,24 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./frontend/*.vue": "./src/frontend/*.vue",
+    "./builder/*.vue": "./src/builder/*.vue"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@motor-cms/ui-design-recipes": "workspace:*"
+  },
+  "devDependencies": {
+    "vue": "^3.5.43"
+  }
 }
