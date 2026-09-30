@@ -9,7 +9,7 @@ import { blockBase } from './base.js'
 // `blockBase` is listed, not extended: an extended base would not reach the `base` slot of a recipe with slots.
 export const rowGrid = tv({
   slots: {
-    base: [blockBase(), 'tw:block tw:w-full tw:max-w-420 tw:mx-auto tw:px-4'],
+    base: [blockBase(), 'tw:block tw:w-full tw:max-w-page tw:mx-auto tw:px-4'],
     row: 'tw:flex tw:flex-wrap tw:-mx-2 tw:-mt-2',
     column: 'tw:box-border tw:w-full tw:max-w-full tw:shrink-0 tw:mt-2 tw:px-2',
   },

@@ -6,7 +6,7 @@ const s = rowGrid
 describe('rowGrid', () => {
   it('the container is centred, capped and padded on both sides', () => {
     const base = s().base().split(/\s+/)
-    for (const c of ['tw:box-border', 'tw:w-full', 'tw:max-w-420', 'tw:mx-auto', 'tw:px-4']) expect(base).toContain(c)
+    for (const c of ['tw:box-border', 'tw:w-full', 'tw:max-w-page', 'tw:mx-auto', 'tw:px-4']) expect(base).toContain(c)
   })
   it('the row pulls the half gutters of its columns back out', () => {
     const row = s().row().split(/\s+/)
