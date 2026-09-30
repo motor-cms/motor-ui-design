@@ -80,6 +80,9 @@ describe('paragraphAtom css', () => {
     expect(css).toMatch(/text-decoration-line: underline/)
     expect(css).toMatch(/:before|::before/)
     expect(css).toMatch(/hyphens: auto/)
+    // the CSS keyword of the legacy site (token motion.ease-base), not Tailwind's own cubic-bezier
+    expect(css).toMatch(/transition-timing-function: var\(--zrm-motion-ease-base\)/)
+    expect(css).not.toMatch(/\.tw\\:ease-in-out/)
     expect(css).toMatch(/list-style: var\(--ordered-list-style\)/)
     expect(css).toMatch(/@container page \(width >= 1025px\)/)
     expect(css).toMatch(/h1[^{]*\{[^}]*font-size: clamp\(/)

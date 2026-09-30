@@ -107,6 +107,9 @@ describe('buttonAtom', () => {
     expect(css).toMatch(/border-radius: calc\(infinity \* 1px\)|border-radius: 3\.40282e38px|border-radius: 33554428px/)
     expect(css).toMatch(/outline-style: solid|--tw-outline-style: solid/)
     expect(css).toMatch(/-webkit-text-stroke: 0\.4px currentcolor/)
+    // the CSS keyword of the legacy site (token motion.ease-base), not Tailwind's own cubic-bezier
+    expect(css).toMatch(/transition-timing-function: var\(--zrm-motion-ease-base\)/)
+    expect(css).not.toMatch(/\.tw\\:ease-in-out/)
     expect(css).toMatch(/group-hover\\\/btn|group\\\/btn/)
     expect(css).toMatch(/background-color: var\(--zrm-color-dark-100\)/)
   })

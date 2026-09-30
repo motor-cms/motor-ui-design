@@ -30,7 +30,7 @@ export const paragraphAtom = tv({
     'tw:[&_ul]:m-0 tw:[&_ul]:pl-6 tw:[&_ol]:pl-6 tw:[&_ol]:[list-style:var(--ordered-list-style)]',
     // links: an inline flex box, dark, underlined; accent colour and a thin stroke on hover, an outline on keyboard focus
     'tw:[&_a]:inline-flex tw:[&_a]:items-center tw:[&_a]:justify-start tw:[&_a]:text-dark-100 tw:[&_a]:underline',
-    'tw:[&_a]:transition-colors tw:[&_a]:duration-350 tw:[&_a]:ease-in-out',
+    'tw:[&_a]:transition-colors tw:[&_a]:duration-350 tw:[&_a]:ease-base',
     'tw:[&_a:hover]:text-primary-100 tw:[&_a:focus]:text-primary-100 tw:[&_a:active]:text-primary-100',
     'tw:[&_a:hover]:[-webkit-text-stroke:0.4px_currentcolor]',
     'tw:[&_a:focus-visible]:outline-2 tw:[&_a:focus-visible]:outline-solid tw:[&_a:focus-visible]:outline-current',

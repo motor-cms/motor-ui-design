@@ -15,11 +15,12 @@ const props = defineProps<{
 }>()
 
 const levels = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
-const weights = ['light', 'regular', 'medium', 'bold']
-const contexts = ['flush', 'flush-pointer', 'centered', 'centered-vp', 'left', 'hyphenated']
+const displayedLevels = Object.keys(headlineAtom.variants.level)
+const weights = Object.keys(headlineAtom.variants.weight)
+const contexts = Object.keys(headlineAtom.variants.context)
 
 const tag = computed(() => (levels.includes(props.type ?? '') ? props.type : 'h2'))
-const level = computed(() => (props.displayedLevel && [...levels, 'h6-grey'].includes(props.displayedLevel) ? props.displayedLevel : tag.value))
+const level = computed(() => (props.displayedLevel && displayedLevels.includes(props.displayedLevel) ? props.displayedLevel : tag.value))
 const cls = computed(() =>
   headlineAtom({
     level: level.value as 'h2',

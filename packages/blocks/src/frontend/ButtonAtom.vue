@@ -16,8 +16,8 @@ const props = defineProps<{
   context?: string
 }>()
 
-const variants = ['dark', 'light', 'primary', 'blur', 'ghost', 'inactive', 'disabled', 'link', 'small', 'checkout', 'checkout-next-step']
-const contexts = ['inline-centered', 'hyphenated', 'shifted', 'corner', 'static-left', 'gap-below']
+const variants = Object.keys(buttonAtom.variants.variant)
+const contexts = Object.keys(buttonAtom.variants.context)
 
 const slots = computed(() =>
   buttonAtom({
@@ -25,11 +25,13 @@ const slots = computed(() =>
     context: (contexts.includes(props.context ?? '') ? props.context : 'none') as 'none',
   }),
 )
-const rel = computed(() => (props.href && /^[a-z][a-z\d+.-]*:/i.test(props.href) ? 'noopener noreferrer' : undefined))
+// the `disabled` look is a disabled control: no `href` (not focusable, does not navigate), out of the tab order
+const disabled = computed(() => props.variant === 'disabled')
+const rel = computed(() => (props.href && !disabled.value && /^[a-z][a-z\d+.-]*:/i.test(props.href) ? 'noopener noreferrer' : undefined))
 </script>
 
 <template>
-  <a :href="href" :class="slots.base({ class: classes })" :target="target ?? undefined" :rel="rel" tabindex="0" :aria-label="title">
+  <a :href="disabled ? undefined : href" :class="slots.base({ class: classes })" :target="target ?? undefined" :rel="rel" :tabindex="disabled ? -1 : 0" :aria-label="title" :aria-disabled="disabled ? 'true' : undefined">
     <div :class="slots.inner()">
       <span :class="slots.label()">{{ title }}</span>
       <div v-if="has_arrow" :class="slots.icon()">

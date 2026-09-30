@@ -15,8 +15,8 @@ const props = defineProps<{
   context?: string
 }>()
 
-const bullets = ['dot', 'check']
-const contexts = ['hyphenated', 'left', 'muted-pointer', 'soft', 'spaced', 'padded-end', 'padded-start']
+const bullets = Object.keys(paragraphAtom.variants.bullets)
+const contexts = Object.keys(paragraphAtom.variants.context)
 
 const content = computed(() => {
   const html = props.html && props.html.length > 0 ? props.html : `<p>${props.text}</p>`

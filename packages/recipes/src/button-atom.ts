@@ -22,13 +22,13 @@ export const buttonAtom = tv({
       blockBase(),
       'tw:group/btn tw:block tw:w-fit tw:cursor-pointer tw:no-underline',
       'tw:mt-6 tw:p-0.5 tw:rounded-full tw:text-sm tw:leading-5',
-      'tw:transition-colors tw:duration-350 tw:ease-in-out',
+      'tw:transition-colors tw:duration-350 tw:ease-base',
       'tw:hover:[-webkit-text-stroke:0.4px_currentcolor]',
       'tw:focus-visible:outline-2 tw:focus-visible:outline-solid tw:focus-visible:outline-current',
     ],
     inner: 'tw:box-border tw:flex tw:items-center tw:justify-center tw:rounded-full tw:px-6 tw:py-3.5',
-    label: 'tw:font-medium tw:transition-colors tw:duration-350 tw:ease-in-out',
-    icon: 'tw:flex tw:items-center tw:justify-center tw:ml-6 tw:transition-colors tw:duration-350 tw:ease-in-out',
+    label: 'tw:font-medium tw:transition-colors tw:duration-350 tw:ease-base',
+    icon: 'tw:flex tw:items-center tw:justify-center tw:ml-6 tw:transition-colors tw:duration-350 tw:ease-base',
   },
   variants: {
     variant: {
