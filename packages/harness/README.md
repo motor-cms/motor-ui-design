@@ -27,10 +27,13 @@ motor-ui-parity --config <file> [--reference <dir>] [--blocks A,B] [--theme <nam
   other than 0, `--reference`, states skipped because the reference did not capture them) is listed in `summary.json`
   (`partial`), on the verdict line (`gate: PARTIAL OK` / `FAILED (partial run)`) and in the report. `gate: OK` is only
   printed for a complete run. A run with zero comparisons fails.
-- **Declared clipping is not a narrowing.** Where the reference records the default state at a viewport as `clipped`
-  (the page clips the block there, e.g. outside a carousel track), every state of that instance at that viewport is
-  skipped as outside the contract: counted under `skipped` (`declared: true`), shown as `declared clipped` on the verdict
-  line, and not listed in `partial`. Any other missing capture keeps the run partial.
+- **Declared clipping is a narrow exception.** A skipped state is `declared` only when the default state at that viewport
+  is recorded as `clipped` (the page clips the block there, e.g. outside a carousel track) **and** the skipped state's own
+  capture entry is missing or `clipped`. Declared skips are counted under `skipped` (`declared: true`), shown as
+  `declared clipped` on the verdict line, and not listed in `partial`. Any other status (a failed hover capture next to a
+  clipped default, say) stays undeclared and keeps the run partial. Declaring never excuses an instance wholesale: one
+  with no captured state at any viewport of the run fails the run (`uncompared` in `summary.json`, `NO COMPARABLE STATE`
+  on the console), declared or not.
 - Exit codes: 0 all good, 1 differences or missing implementations, 2 harness error (font not loaded, asset missing, ...).
 - Report: `<report>/index.html` (diff images, style diffs, breakpoint-edge table) and `<report>/summary.json`. The report
   directory is wiped before a run, so the harness refuses one that is or contains the working directory, the config, the

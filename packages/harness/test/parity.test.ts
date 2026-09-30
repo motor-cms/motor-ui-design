@@ -176,6 +176,68 @@ describe('a narrowed or altered run never reads like the full gate (I2)', () => 
     expect(cl.partial.join(' | ')).not.toMatch(/skipped/)
   }, 300_000)
 
+  it('a skip is declared only when the default state is clipped and the skipped state itself is missing or clipped', async () => {
+    // default clipped, hover failed to capture: the hover skip is not covered by the declaration, the run stays partial
+    const s = setup('partial-clipped-failed-hover', (ref) => {
+      const f = join(ref, 'DemoBlock/demo-1/capture.json')
+      const c = JSON.parse(readFileSync(f, 'utf8'))
+      c.states.default['768'].status = 'clipped'
+      c.states.hover['768'].status = 'failed'
+      writeFileSync(f, JSON.stringify(c))
+    })
+    const r = await go(s, 'gate', { viewports: [375, 768] })
+    const at768 = r.skipped.filter((x) => x.key === 'DemoBlock' && x.instance === 'demo-1' && x.viewport === 768)
+    expect(Object.fromEntries(at768.map((x) => [x.state, x.declared]))).toEqual({ default: true, hover: false })
+    expect(r.partial.join(' | ')).toMatch(/1 state\/viewport combination\(s\) skipped/)
+
+    // control: the default state captured, hover clipped: nothing declares hover clipped
+    const s2 = setup('partial-clipped-hover-only', (ref) => {
+      const f = join(ref, 'DemoBlock/demo-1/capture.json')
+      const c = JSON.parse(readFileSync(f, 'utf8'))
+      c.states.hover['768'].status = 'clipped'
+      writeFileSync(f, JSON.stringify(c))
+    })
+    const r2 = await go(s2, 'gate', { viewports: [375, 768] })
+    expect(r2.skipped.map((x) => [x.state, x.viewport, x.declared])).toEqual([['hover', 768, false]])
+    expect(r2.partial.join(' | ')).toMatch(/1 state\/viewport combination\(s\) skipped/)
+  }, 300_000)
+
+  it('an instance with no comparable state at any viewport of the run fails the run, even when every skip is declared', async () => {
+    const clipAt = (vps: string[]) => (ref: string) => {
+      const f = join(ref, 'DemoBlock/demo-1/capture.json')
+      const c = JSON.parse(readFileSync(f, 'utf8'))
+      for (const vp of vps) {
+        c.states.default[vp].status = 'clipped'
+        delete c.states.hover[vp]
+      }
+      writeFileSync(f, JSON.stringify(c))
+    }
+    const all = setup('floor-all-clipped', clipAt(['375', '768']))
+    const r = await go(all, 'gate', { viewports: [375, 768] })
+    expect(r.skipped.every((x) => x.key === 'DemoBlock' ? x.declared : true)).toBe(true)
+    expect(r.uncompared.map((x) => `${x.key}/${x.instance}`)).toEqual(['DemoBlock/demo-1'])
+    expect(r.ok).toBe(false)
+
+    // control: clipped at one viewport of the run only, the instance is still compared at the other: a full-strength pass
+    const one = setup('floor-one-clipped', clipAt(['768']))
+    const c = await go(one, 'gate', { viewports: [375, 768] })
+    expect(c.uncompared).toEqual([])
+    expect(c.ok).toBe(true)
+  }, 300_000)
+
+  it('the CLI says which instance has no comparable state', () => {
+    const s = setup('cli-floor', (ref) => {
+      const f = join(ref, 'DemoBlock/demo-1/capture.json')
+      const c = JSON.parse(readFileSync(f, 'utf8'))
+      c.states.default['375'].status = 'clipped'
+      delete c.states.hover['375']
+      writeFileSync(f, JSON.stringify(c))
+    })
+    const p = spawnSync('node', [join(pkg, 'dist/cli.js'), '--config', join(s.dir, 'parity.config.mjs'), '--mode', 'gate', '--viewports', '375'], { cwd: s.dir, encoding: 'utf8', timeout: 120_000 })
+    expect(p.status, p.stdout + p.stderr).toBe(1)
+    expect(p.stdout).toMatch(/NO COMPARABLE STATE DemoBlock demo-1: .*no captured state at any viewport of this run/)
+  }, 180_000)
+
   it('zero comparisons fail the run', async () => {
     const s = setup('zero')
     const r = await go(s, 'gate', { viewports: [1440] }) // the fixture reference has no capture at 1440

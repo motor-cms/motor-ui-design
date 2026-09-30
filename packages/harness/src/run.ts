@@ -7,7 +7,7 @@ import { inferOrigin, listInstances, originCandidates, listKeys, pngName, pngSiz
 import { resolveForeign } from './container.js'
 import { edgeTable, writeReport } from './report.js'
 import { startServer } from './server.js'
-import type { CheckResult, Comparison, ContainerInfo, ContextGaps, ForeignBox, EdgeReport, Exemptions, MissingResult, Mode, ParityConfig, RunSummary, SkippedResult } from './types.js'
+import type { CheckResult, Comparison, ContainerInfo, ContextGaps, ForeignBox, EdgeReport, Exemptions, MissingResult, Mode, ParityConfig, RunSummary, SkippedResult, UncomparedResult } from './types.js'
 
 export interface RunOptions {
   mode: Mode
@@ -155,6 +155,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
   let results: CheckResult[] = []
   let skipped: SkippedResult[] = []
   const missing: MissingResult[] = []
+  let uncompared: UncomparedResult[] = []
   let imgCount = 0
   let keepImages = true
   let edge: EdgeReport | undefined
@@ -236,6 +237,9 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
     }
 
     type Job = { inst: InstanceInfo; vp: number }
+    // instances with at least one captured state at some viewport of the pass, and every instance the pass looked at
+    const comparable = new Set<string>()
+    const seen = new Map<string, UncomparedResult>()
     // One pass over the pack at a scrollbar width. The verdict pass is the one at `scrollbar`; the edge pass is informational.
     const implemented = Object.entries(inventory).filter(([, v]) => v.frontend).map(([k]) => k)
     const doPass = async (scrollbar: number, vps: number[], wantStyles: boolean) => {
@@ -243,6 +247,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
     for (const k of keys) {
       for (const inst of listInstances(reference, k)) {
         if (opts.mode === 'gate' && !inventory[k]?.frontend) continue
+        seen.set(`${inst.key}/${inst.instance}`, { key: inst.key, instance: inst.instance })
         for (const vp of vps) jobs.push({ inst, vp })
       }
     }
@@ -253,15 +258,20 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
       const states: string[] = []
       const widths: Record<string, number | undefined> = {}
       // the capture declares the block clipped by its page at this width (e.g. outside a carousel track): no state exists
-      const declared = inst.capture.default?.[String(vp)]?.status === 'clipped'
+      const clippedHere = inst.capture.default?.[String(vp)]?.status === 'clipped'
       for (const st of inst.states) {
         const c = inst.capture[st]?.[String(vp)]
         if (c?.status === 'captured') {
           states.push(st)
           widths[st] = c.width
-        } else skipped.push({ key: inst.key, instance: inst.instance, viewport: vp, state: st, reason: c ? `not captured in the reference: ${c.status}` : 'no capture entry', declared })
+        } else {
+          // declared only where the state itself is missing or clipped; any other status (a failed capture) is not covered
+          const declared = clippedHere && (!c || c.status === 'clipped')
+          skipped.push({ key: inst.key, instance: inst.instance, viewport: vp, state: st, reason: c ? `not captured in the reference: ${c.status}` : 'no capture entry', declared })
+        }
       }
       if (!states.length) return
+      comparable.add(`${inst.key}/${inst.instance}`)
       const cap0 = inst.capture[states[0]][String(vp)]
       // The reference PNG's size tells the element's sub-pixel origin; a pack without PNGs renders at whole pixels.
       const pngFile = join(inst.dir, pngName(vp, states[0]))
@@ -373,6 +383,9 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
     }
 
     await doPass(scrollbar, viewports, true)
+    // Declared clipping narrows a run only as far as the instance is still compared somewhere: one that is skipped at
+    // every viewport of the run has nothing compared at all, declared or not.
+    uncompared = [...seen].filter(([k]) => !comparable.has(k)).map(([, v]) => v)
 
     // Informational only (Review Focus 1): the verdict pass runs at scrollbar 0, where a container query and a viewport
     // media query see the same width. Re-run the breakpoint-edge viewports with a classic scrollbar and report both sides.
@@ -432,14 +445,15 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
     seconds: Math.round((Date.now() - t0) / 100) / 10,
     scrollbar,
     tolerance: TOLERANCE,
-    totals: { checks: results.length, pass: results.filter((r) => r.status === 'pass').length, fail, exempt: results.filter((r) => r.status === 'exempt').length, contextGap: results.filter((r) => r.status === 'context-gap').length, skipped: skipped.length, missing: missing.length },
+    totals: { checks: results.length, pass: results.filter((r) => r.status === 'pass').length, fail, exempt: results.filter((r) => r.status === 'exempt').length, contextGap: results.filter((r) => r.status === 'context-gap').length, skipped: skipped.length, missing: missing.length, uncompared: uncompared.length },
     missing,
+    uncompared,
     partial,
     unusedContextGaps: Object.keys(contextGaps).filter((k) => !usedGaps.has(k)),
     ...(edge ? { edgeReport: edge } : {}),
     results,
     skipped,
-    ok: fail === 0 && missing.length === 0 && results.length > 0,
+    ok: fail === 0 && missing.length === 0 && uncompared.length === 0 && results.length > 0,
   }
   writeReport(reportDir, summary)
   return summary

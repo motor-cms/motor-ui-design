@@ -49,6 +49,7 @@ const main = async () => {
   }
   for (const [k, x] of byKey) console.log(`  ${x.fail ? 'FAIL' : 'PASS'} ${k}: ${x.pass} pass, ${x.fail} fail, ${x.exempt} exempt${x['context-gap'] ? `, ${x['context-gap']} context gap (not a pass)` : ''}`)
   for (const m of summary.missing) console.log(`  MISSING ${m.key}: no ${m.what} implementation in the block map`)
+  for (const u of summary.uncompared) console.log(`  NO COMPARABLE STATE ${u.key} ${u.instance}: no captured state at any viewport of this run (every state is skipped), nothing of it is compared`)
   const shown = summary.results.filter((r) => r.status === 'fail').slice(0, 30)
   for (const r of shown) {
     const style = r.styleDiffs?.length ? ` [style: ${r.styleDiffs.slice(0, 3).map((d) => `${d.property} at ${d.path}: ${d.a} vs ${d.b}`).join('; ')}${(r.styleDiffCount ?? 0) > 3 ? `; +${r.styleDiffCount! - 3} more` : ''}]` : ''
@@ -65,7 +66,7 @@ const main = async () => {
   const gaps = t.contextGap ? `, ${t.contextGap} context gap (not a pass)` : ''
   // A narrowed or altered run never reads like the full contract run.
   const verdict = summary.ok ? (summary.partial.length ? 'PARTIAL OK' : 'OK') : summary.partial.length ? 'FAILED (partial run)' : 'FAILED'
-  console.log(`${summary.mode}: ${verdict}: ${t.checks} checks, ${t.pass} pass, ${t.fail} fail, ${t.exempt} exempt${gaps}, ${t.skipped} skipped${t.skipped ? ` (${summary.skipped.filter((x) => x.declared).length} declared clipped)` : ''}, ${t.missing} missing; ${summary.seconds}s`)
+  console.log(`${summary.mode}: ${verdict}: ${t.checks} checks, ${t.pass} pass, ${t.fail} fail, ${t.exempt} exempt${gaps}, ${t.skipped} skipped${t.skipped ? ` (${summary.skipped.filter((x) => x.declared).length} declared clipped)` : ''}, ${t.missing} missing${t.uncompared ? `, ${t.uncompared} with no comparable state` : ''}; ${summary.seconds}s`)
   if (summary.partial.length) console.log(`  PARTIAL, not a parity result: ${summary.partial.join('; ')}`)
   process.exitCode = summary.ok ? 0 : 1
 }

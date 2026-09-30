@@ -157,13 +157,19 @@ export interface SkippedResult {
   viewport: number
   state: string
   reason: string
-  /** The reference records the block as clipped at this viewport (default state): outside the contract, not a narrowing. */
+  /** The default state is clipped at this viewport and this state is missing or clipped too: outside the contract, not a narrowing. */
   declared: boolean
 }
 
 export interface MissingResult {
   key: string
   what: 'frontend' | 'builder'
+}
+
+/** An instance the run looked at but compared nothing of: no captured state at any viewport of the run. */
+export interface UncomparedResult {
+  key: string
+  instance: string
 }
 
 export interface RunSummary {
@@ -174,8 +180,10 @@ export interface RunSummary {
   seconds: number
   scrollbar: number
   tolerance: { threshold: number; maxDiffPixelRatio: number }
-  totals: { checks: number; pass: number; fail: number; exempt: number; contextGap: number; skipped: number; missing: number }
+  totals: { checks: number; pass: number; fail: number; exempt: number; contextGap: number; skipped: number; missing: number; uncompared: number }
   missing: MissingResult[]
+  /** Instances with no comparable state at any viewport of the run, declared clipping or not. Fails the run. */
+  uncompared: UncomparedResult[]
   /** Why this run is not the full contract run (narrowed viewports/blocks, identity mode, skipped states, ...). Empty for a full run. */
   partial: string[]
   /** validate: context-gap entries that matched no failing check any more (stale entries) */

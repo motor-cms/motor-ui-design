@@ -50,6 +50,9 @@ code{background:#f3f3f3;padding:0 3px}details{margin:6px 0}</style>`)
   if (s.missing.length) {
     h.push('<h2>Missing implementations</h2><ul>' + s.missing.map((m) => `<li class="FAIL">${esc(m.key)}: no ${m.what} implementation in the block map</li>`).join('') + '</ul>')
   }
+  if (s.uncompared.length) {
+    h.push('<h2>No comparable state</h2><p>Captured in no state at any viewport of this run, so nothing of them is compared:</p><ul>' + s.uncompared.map((u) => `<li class="FAIL">${esc(u.key)} ${esc(u.instance)}</li>`).join('') + '</ul>')
+  }
   if (s.unusedContextGaps.length) {
     h.push('<h2>Stale context-gap entries</h2><p>Listed in the context-gap file but no failing check matched them any more: remove them.</p><ul>' + s.unusedContextGaps.map((k) => `<li>${esc(k)}</li>`).join('') + '</ul>')
   }
