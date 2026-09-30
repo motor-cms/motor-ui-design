@@ -15,3 +15,7 @@ Client names, brand colours, client fonts, page data, screenshots, or anything c
 of a client site. Those belong in the client layer repo. `test/no-client-data.test.ts` fails the build on a
 list of known terms; do not weaken it and do not add files to its allowlist (only the guard itself is allowed).
 Keep the docs neutral too: say "client layer", not the client's name.
+
+## Branch
+
+Work on `staging` directly; `develop` and `production` exist for the `alpha` and `latest` channels (merge-down flows production → staging → develop).
