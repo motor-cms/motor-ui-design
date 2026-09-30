@@ -18,7 +18,7 @@ repos and depend on these packages.
 pnpm install
 pnpm build     # tsc per package
 pnpm test      # build, then Vitest (smoke tests, the structural no-client-data guard, the Tailwind 4 token test)
-pnpm parity    # stub until the harness lands; exits 1
+pnpm parity    # build, then the harness gate against its own synthetic fixture (packages/harness/test/fixture); a client layer runs it against its own reference pack
 ```
 
 Node 22, pnpm 12. Branches `develop`, `staging`, `production` publish `alpha`, `rc`, `latest` to npmjs
