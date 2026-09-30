@@ -1,5 +1,6 @@
 export const packageName = '@motor-cms/ui-design-harness'
 export { defineConfig } from './types.js'
-export type { BlockEntry, BlockMap, ParityConfig, PropsContext, Exemptions, RunSummary, CheckResult } from './types.js'
+export type { BlockEntry, BlockMap, ParityConfig, PropsContext, Exemptions, RunSummary, CheckResult, ContainerSpec, ContainerInfo, ForeignBox, ForeignSelector } from './types.js'
+export { placeholderHtml } from './container.js'
 export { run } from './run.js'
 export { comparePng, diffStyles, TOLERANCE } from './compare.js'

@@ -1,0 +1,23 @@
+{
+ "block": "GridBlock",
+ "instance": "grid-1",
+ "host": "neutral",
+ "states": [
+  "default"
+ ],
+ "node": {
+  "children": [
+   {
+    "block": "AlienText",
+    "id": "a",
+    "selector": ".grid__col--a > .alien"
+   },
+   {
+    "block": "PlainBlock",
+    "id": "b",
+    "selector": ".grid__col--b > .plain",
+    "text": "Plain block text"
+   }
+  ]
+ }
+}

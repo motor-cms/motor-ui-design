@@ -127,7 +127,9 @@ const run = async () => {
     const component = mod.default ?? mod
     // The legacy markup is handed to adapters only in identity/test mode (--legacy-css-on-new): a real adapter must map
     // the fixture to props itself, that mapping is what the app will use.
-    const ctx = { key, instance, viewport: vp, legacyHtml: q.get('legacyCss') === '1' ? html : '' }
+    // Container mode: the foreign children measured in the legacy render of this instance (see README), else none.
+    const foreign = (w.__parityForeign as unknown[] | undefined) ?? []
+    const ctx = { key, instance, viewport: vp, legacyHtml: q.get('legacyCss') === '1' ? html : '', foreign }
     const props = entry.props(fixture, ctx)
     const slotHtml: Record<string, string> = entry.slots ? entry.slots(fixture, ctx) : {}
     const slots = Object.fromEntries(Object.entries(slotHtml).map(([n, s]) => [n, () => h('span', { style: 'display:contents', innerHTML: s })]))

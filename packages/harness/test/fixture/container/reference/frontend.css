@@ -1,0 +1,13 @@
+/* Legacy page CSS of the synthetic container fixture: neutral values, viewport media queries. */
+body { margin: 0; font: 16px/1.5 sans-serif; color: #222; }
+.plain { padding: 6px 10px; background: #f0e8e8; }
+.alien { margin: 0 0 6px; padding: 10px; border: 2px solid #844; background: repeating-linear-gradient(45deg, #fdd, #fdd 6px, #fbb 6px, #fbb 12px); font-size: 13px; }
+.alien--media { height: 120px; margin: 0; }
+.panel { padding: 12px 16px; background: #e8f0e8; }
+.panel__media { margin-bottom: 10px; }
+.plain--after { margin-top: 10px; }
+.grid { display: flex; gap: 24px; padding: 8px; background: #eef3ee; }
+.grid__col { flex: 1 1 0; min-width: 0; }
+@media (min-width: 768px) {
+  .grid__col--a { flex-grow: 2; }
+}

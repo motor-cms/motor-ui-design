@@ -2,6 +2,8 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Browser, BrowserContext, Page } from 'playwright'
 import type { StyleEl } from './compare.js'
+import { placeholderHtml } from './container.js'
+import type { ForeignBox, ForeignSelector } from './types.js'
 
 // Stabilisation of the capture (reduced motion, animations and transitions off, fonts loaded, images loaded),
 // reproduced here so that a legacy render is made under the conditions of the reference.
@@ -45,6 +47,10 @@ export interface RenderSpec {
   origin?: [number, number]
   states: string[]
   wantStyles: boolean
+  /** legacy route, container mode: measure these children and replace them by placeholders */
+  container?: ForeignSelector[]
+  /** frontend/builder route, container mode: the boxes measured in the legacy render, handed to the adapter as ctx.foreign */
+  foreign?: ForeignBox[]
 }
 
 /** Search for the sub-pixel origin at which the first state's screenshot best matches a target (validate mode). */
@@ -60,6 +66,10 @@ export interface Rendered {
   /** per state: PNG and styles, or the reason the state could not be produced */
   states: Record<string, { png: Buffer; styles?: StyleEl[] } | { error: string }>
   fonts: string[]
+  /** container mode: the legacy children that were measured and replaced (legacy route) */
+  foreign?: ForeignBox[]
+  /** container mode (frontend/builder route): how the new render deviates from the handed placeholders; empty when it does not */
+  containerProblems?: string[]
 }
 
 // In-page helpers: serialised into the browser, they must not close over Node variables.
@@ -188,6 +198,78 @@ const UNION_BOX = () => {
   return { x, y, width: right - x, height: bottom - y }
 }
 
+// Container mode, legacy side. Finds the foreign children, tags them and returns their border boxes and the layout
+// properties that matter for their parent. Nested matches: the outermost element wins.
+const MEASURE_FOREIGN = (entries: { id: string; selector: string }[]) => {
+  const leaf = document.getElementById('parity-leaf')!
+  const roots = [...leaf.children]
+  const found: { el: Element; id: string; selector: string }[] = []
+  for (const e of entries) {
+    let list: Element[]
+    try {
+      list = [...leaf.querySelectorAll(e.selector)]
+    } catch {
+      return { error: `selector ${JSON.stringify(e.selector)} is not valid` }
+    }
+    if (!list.length) return { error: `selector ${JSON.stringify(e.selector)} (foreign child "${e.id}") matched no element in the legacy render` }
+    for (const el of list) {
+      if (roots.includes(el)) return { error: `selector ${JSON.stringify(e.selector)} matches the root of the block: the block itself cannot be a foreign child` }
+      if (!found.some((f) => f.el === el)) found.push({ el, id: e.id, selector: e.selector })
+    }
+  }
+  const kept = found.filter((f) => !found.some((o) => o.el !== f.el && o.el.contains(f.el)))
+  kept.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+  const DEFAULTS: Record<string, string> = { position: 'static', float: 'none', clear: 'none', 'vertical-align': 'baseline', 'align-self': 'auto', 'justify-self': 'auto', order: '0', 'grid-column-start': 'auto', 'grid-column-end': 'auto', 'grid-row-start': 'auto', 'grid-row-end': 'auto' }
+  const boxes = []
+  for (let i = 0; i < kept.length; i++) {
+    const { el, id, selector } = kept[i]
+    const cs = getComputedStyle(el)
+    if (cs.display === 'contents') return { error: `foreign child ${JSON.stringify(selector)} is display: contents and has no box to measure: select its children instead` }
+    const r = el.getBoundingClientRect()
+    const layout: Record<string, string> = {}
+    // a box the placeholder can size: inline boxes become inline-blocks, every other display a block
+    layout.display = cs.display === 'none' ? 'none' : cs.display.startsWith('inline') ? 'inline-block' : 'block'
+    for (const k of Object.keys(DEFAULTS)) if (cs.getPropertyValue(k) !== DEFAULTS[k]) layout[k] = cs.getPropertyValue(k)
+    if (cs.position !== 'static') for (const k of ['top', 'right', 'bottom', 'left']) if (cs.getPropertyValue(k) !== 'auto') layout[k] = cs.getPropertyValue(k)
+    el.setAttribute('data-parity-measure', String(i))
+    boxes.push({ id, index: i, selector, width: r.width, height: r.height, margin: `${cs.marginTop} ${cs.marginRight} ${cs.marginBottom} ${cs.marginLeft}`, layout })
+  }
+  return { boxes }
+}
+
+const REPLACE_FOREIGN = (items: { index: number; html: string }[]) => {
+  for (const it of items) {
+    const el = document.querySelector(`[data-parity-measure="${it.index}"]`)
+    const t = document.createElement('template')
+    t.innerHTML = it.html
+    el!.replaceWith(t.content)
+  }
+  return document.body.offsetHeight
+}
+
+// Container mode, new side: every placeholder handed over must be in the render exactly once, at the measured size.
+const CHECK_PLACEHOLDERS = (expected: { index: number; id: string; width: number; height: number }[]) => {
+  const leaf = document.getElementById('parity-leaf')!
+  const els = [...leaf.querySelectorAll('[data-parity-foreign]')]
+  const problems: string[] = []
+  const fmt = (n: number) => String(Math.round(n * 1000) / 1000)
+  for (const e of expected) {
+    const m = els.filter((x) => x.getAttribute('data-parity-foreign') === String(e.index))
+    if (!m.length) problems.push(`placeholder ${e.index} (${e.id}) is missing in the new render`)
+    else if (m.length > 1) problems.push(`placeholder ${e.index} (${e.id}) appears ${m.length} times in the new render`)
+    else {
+      const r = m[0].getBoundingClientRect()
+      if (Math.abs(r.width - e.width) > 0.05 || Math.abs(r.height - e.height) > 0.05) {
+        problems.push(`placeholder ${e.index} (${e.id}) is ${fmt(r.width)}x${fmt(r.height)} in the new render, measured ${fmt(e.width)}x${fmt(e.height)} in the legacy render`)
+      }
+    }
+  }
+  for (const x of els) {
+    if (!expected.some((e) => String(e.index) === x.getAttribute('data-parity-foreign'))) problems.push(`placeholder ${x.getAttribute('data-parity-foreign')} in the new render was never measured in the legacy render`)
+  }
+  return problems
+}
+
 const FOCUSED_INSIDE = () => {
   const t = document.getElementById('parity-leaf')
   const a = document.activeElement
@@ -264,6 +346,8 @@ export const render = async (ctx: BrowserContext, problems: string[], o: Browser
     if (spec.legacyCss) q.set('legacyCss', '1')
     if (spec.origin?.[0]) q.set('ox', String(spec.origin[0]))
     if (spec.origin?.[1]) q.set('oy', String(spec.origin[1]))
+    // Container mode: the boxes measured in the legacy render reach the adapter as ctx.foreign (see app/main.ts).
+    if (spec.foreign) await page.addInitScript((f) => { (window as any).__parityForeign = f }, spec.foreign)
     const url = `${o.origin}/${spec.route}/${encodeURIComponent(spec.key)}/${encodeURIComponent(spec.instance)}?${q}`
     await page.goto(url, { waitUntil: 'load', timeout: 60_000 })
     await page
@@ -283,6 +367,17 @@ export const render = async (ctx: BrowserContext, problems: string[], o: Browser
     if (bgFailed.length) throw new RenderError(`background images did not load (${spec.route} ${spec.key}/${spec.instance} at ${spec.viewport}px): ${bgFailed.join(', ')}`)
     if (local.length) throw new RenderError(`${spec.route} render of ${spec.key}/${spec.instance} at ${spec.viewport}px: ${local.join('; ')}`)
     if (problems.length) throw new RenderError(problems.join('; '))
+
+    // Container mode, legacy: the foreign children become neutral placeholders of exactly their size.
+    let foreign: ForeignBox[] | undefined
+    if (spec.container) {
+      const m = (await page.evaluate(MEASURE_FOREIGN, spec.container)) as { error: string } | { boxes: Omit<ForeignBox, 'html'>[] }
+      if ('error' in m) throw new RenderError(`container mode, legacy render of ${spec.key}/${spec.instance} at ${spec.viewport}px: ${m.error}`)
+      foreign = m.boxes.map((b) => ({ ...b, html: placeholderHtml(b) }))
+      await page.evaluate(REPLACE_FOREIGN, foreign.map((b) => ({ index: b.index, html: b.html })))
+    }
+    // Container mode, new render: did the adapter put the handed placeholders in, at the measured sizes?
+    const containerProblems = spec.foreign ? await page.evaluate(CHECK_PLACEHOLDERS, spec.foreign) : undefined
 
     const rootCount = await page.locator('#parity-leaf > *').count()
     if (rootCount === 0) throw new RenderError(`${spec.route} render of ${spec.key}/${spec.instance} produced no element`)
@@ -342,7 +437,7 @@ export const render = async (ctx: BrowserContext, problems: string[], o: Browser
       out[state] = { png, styles }
     }
     if (problems.length) throw new RenderError(problems.join('; '))
-    return { states: out, fonts: fonts.faces, origin }
+    return { states: out, fonts: fonts.faces, origin, foreign, containerProblems }
   } finally {
     await page.close()
   }

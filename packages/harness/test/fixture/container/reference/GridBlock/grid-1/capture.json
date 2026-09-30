@@ -1,0 +1,28 @@
+{
+ "viewports": [
+  375,
+  767,
+  768,
+  1024
+ ],
+ "states": {
+  "default": {
+   "375": {
+    "status": "captured",
+    "width": 375
+   },
+   "767": {
+    "status": "captured",
+    "width": 767
+   },
+   "768": {
+    "status": "captured",
+    "width": 768
+   },
+   "1024": {
+    "status": "captured",
+    "width": 1024
+   }
+  }
+ }
+}

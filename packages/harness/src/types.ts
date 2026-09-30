@@ -7,6 +7,51 @@ export interface PropsContext {
   viewport: number
   /** Markup of the legacy render for this instance and viewport. Only set in identity/test mode (--legacy-css-on-new), else ''. */
   legacyHtml: string
+  /**
+   * Container mode (see ParityConfig.containers): the foreign children measured in the legacy render of this instance and
+   * viewport, in document order, each with the markup of its neutral placeholder (`html`). Empty for a block that is not a
+   * configured container, and in identity mode.
+   */
+  foreign: ForeignBox[]
+}
+
+/** A container's foreign child, selected by the consumer. A bare string is both the selector and the id. */
+export interface ForeignSelector {
+  /** Name the adapter finds the box by (`ctx.foreign.filter((b) => b.id === ...)`). */
+  id: string
+  /** CSS selector, matched below the block's root in the legacy markup (it may start at the root). */
+  selector: string
+}
+
+/** A foreign child as measured in the legacy render. */
+export interface ForeignBox {
+  id: string
+  /** Position among the instance's foreign children in document order. */
+  index: number
+  selector: string
+  /** Border box, px. */
+  width: number
+  height: number
+  /** Computed margin, css shorthand (top right bottom left). */
+  margin: string
+  /** Layout-relevant computed properties carried over to the placeholder (display, position, float, grid placement, ...). */
+  layout: Record<string, string>
+  /** The placeholder element: put this, unchanged, where the foreign child sits. */
+  html: string
+}
+
+/** What a container instance reports: the children that were replaced (html and layout left out). */
+export interface ContainerInfo {
+  replaced: Pick<ForeignBox, 'id' | 'index' | 'selector' | 'width' | 'height' | 'margin'>[]
+}
+
+export interface ContainerSpec {
+  /**
+   * The foreign children of this container: the children that are not pilot content (no implementation to compare).
+   * A list of selectors, or a function of the instance's fixture returning one (`implemented` = the block map's keys
+   * with a frontend implementation), for example "every child block whose key is not in the block map".
+   */
+  foreign: (string | ForeignSelector)[] | ((fixture: any, ctx: { key: string; instance: string; viewport: number; implemented: string[] }) => (string | ForeignSelector)[])
 }
 
 export interface BlockEntry {
@@ -51,6 +96,13 @@ export interface ParityConfig {
    * never as pass. The gate never reads this file.
    */
   validateContextGaps?: string
+  /**
+   * Container mode, gate only: block key -> which of its children are foreign. In the legacy render those children are
+   * measured and replaced by neutral placeholder boxes of exactly their size (margins kept); the new render receives the
+   * same boxes in `ctx.foreign`. Everything else, the container's own markup and its pilot children, is compared normally.
+   * Applies to the listed keys only.
+   */
+  containers?: Record<string, ContainerSpec>
   /** Extra directories the dev server may serve (the block map's own directory and the harness are always allowed). */
   fsAllow?: string[]
 }
@@ -92,6 +144,8 @@ export interface CheckResult {
   origin?: [number, number]
   styleDiffs?: StyleDiff[]
   styleDiffCount?: number
+  /** Container mode: the legacy children that were replaced by placeholders for this instance and viewport. */
+  container?: ContainerInfo
 }
 
 export interface SkippedResult {

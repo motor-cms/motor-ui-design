@@ -75,6 +75,52 @@ sibling the legacy markup lacks fails the size comparison.
 `ctx.legacyHtml` is empty unless the run uses `--legacy-css-on-new` (identity fixtures): an adapter must map the fixture to
 props itself, because that mapping is what the app will use.
 
+## Container mode (blocks whose children are other blocks)
+
+A container block (a row with columns, a card with slots) holds other blocks. The legacy render contains their markup and CSS;
+the new render only gets slot HTML strings built by the adapter, without legacy CSS. Content that has no implementation yet can
+never match, and its mismatch would hide whether the container itself is right. Container mode compares what the container is
+responsible for (grid, columns, gutters, offsets, spacing, frame, padding, slot positions) exactly, with the foreign content
+reduced to neutral boxes. It is gate only, per block key, and never applies to a block that is not configured.
+
+```js
+export default defineConfig({
+  containers: {
+    // a list of selectors, or a function of the instance's fixture returning one
+    MyRow: { foreign: (fixture, { key, instance, viewport, implemented }) => /* [{ id, selector }, ...] */ [] },
+    MyCard: { foreign: ['.card__media > *', { id: 'badge', selector: '.card__badge' }] },
+  },
+})
+```
+
+- **Which children are foreign is the consumer's decision.** `foreign` returns CSS selectors (a bare string is its own id;
+  `{ id, selector }` names it). They are matched below the block root in the legacy markup and may start at the root's own
+  classes. A function gets the instance's `fixture` and `implemented`, the block map keys that have a frontend, so "every
+  child block that is not in the block map" is a filter over the fixture's definition tree. The harness knows no block names.
+  Pilot children are not listed: they are rendered and compared like the rest.
+- **Legacy render.** After fonts and images have loaded, each matched element's border box is measured, then the element is
+  replaced by a placeholder: one empty `div` with that width and height (fractional px kept), the computed margins, flat neutral
+  fill, `flex: none`, and the properties that decide how it takes part in its parent (display mapped to block or inline-block,
+  position and insets, float, clear, vertical-align, align-self, justify-self, order, grid placement). The surrounding layout does
+  not change. Nested matches: the outermost element wins. A selector that matches nothing, is invalid, matches the block root or
+  a `display: contents` element is a harness error (exit 2), not a silent pass.
+- **Adapter contract.** `ctx.foreign` (in `props` and `slots`) lists the measured boxes in document order:
+  `{ id, index, selector, width, height, margin, layout, html }`. `html` is the placeholder markup, identical to the legacy
+  one. Put it where the foreign child sits, unchanged: `slots: (fx, ctx) => ({ body: ctx.foreign.filter((b) => b.id === 'x').map((b) => b.html).join('') + ... })`.
+  `ctx.foreign` is `[]` for a block that is not a configured container.
+- **What is compared.** Everything else as before: pixels and size at the usual tolerances (0.1 % of the pixels, size exactly)
+  of the whole block, placeholders included, so a container that mispositions a pilot child, changes a gutter or a column
+  width, or pads differently fails. On top of that the new render is checked for every placeholder: it must be present exactly
+  once (`data-parity-foreign`) and have the measured size (0.05 px). A missing, duplicated or resized placeholder fails the
+  check with `container mode: placeholder <n> (<id>) ...` even where the pixels stay under the tolerance.
+- **What is not compared.** The inside of a foreign child (its markup, text, images, CSS) and its absolutely positioned or
+  overflowing descendants. Its size and margins are taken from the legacy render, so a container cannot be wrong about them.
+- **Report.** Every `frontend-vs-legacy` and `builder-vs-frontend` result of a container instance carries
+  `container.replaced` (`id`, `index`, `selector`, `width`, `height`, `margin`) in `summary.json`, and `index.html` has a
+  "Container mode" table per instance and viewport.
+- **Not active** in `validate` mode (the legacy render must stay the captured one) and with `--legacy-css-on-new` (the new
+  side gets the legacy markup). The config keys must exist in the reference pack.
+
 ## Reference pack layout it reads
 
 `<ref>/<Key>/<instance>/{fixture.json (host, states), capture.json (states[state][viewport] = {status, width}),

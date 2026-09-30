@@ -1,0 +1,25 @@
+{
+ "block": "PanelBlock",
+ "instance": "panel-1",
+ "host": "neutral",
+ "states": [
+  "default"
+ ],
+ "node": {
+  "children": [
+   {
+    "block": "AlienMedia",
+    "id": "media"
+   },
+   {
+    "block": "AlienText",
+    "id": "text"
+   },
+   {
+    "block": "PlainBlock",
+    "id": "pilot",
+    "text": "Plain block text"
+   }
+  ]
+ }
+}

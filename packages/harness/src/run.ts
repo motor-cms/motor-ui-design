@@ -3,10 +3,11 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { DEFAULT_VIEWPORTS, DEFAULT_VIEWPORT_HEIGHT, EDGES, RenderError, edgeOf, newContext, render, type BrowserOptions, type Rendered } from './browser.js'
 import { TOLERANCE, comparePng, diffStyles, type PixelResult } from './compare.js'
-import { inferOrigin, listInstances, originCandidates, listKeys, pngName, pngSize, type InstanceInfo } from './pack.js'
+import { inferOrigin, listInstances, originCandidates, listKeys, pngName, pngSize, readFixture, type InstanceInfo } from './pack.js'
+import { resolveForeign } from './container.js'
 import { edgeTable, writeReport } from './report.js'
 import { startServer } from './server.js'
-import type { CheckResult, Comparison, ContextGaps, EdgeReport, Exemptions, MissingResult, Mode, ParityConfig, RunSummary, SkippedResult } from './types.js'
+import type { CheckResult, Comparison, ContainerInfo, ContextGaps, ForeignBox, EdgeReport, Exemptions, MissingResult, Mode, ParityConfig, RunSummary, SkippedResult } from './types.js'
 
 export interface RunOptions {
   mode: Mode
@@ -135,6 +136,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
   const keys = opts.blocks?.length ? opts.blocks : allKeys
   for (const k of keys) if (!allKeys.includes(k)) throw new Error(`block ${k} is not in the reference (${allKeys.join(', ')})`)
   for (const k of Object.keys(exemptions)) if (!allKeys.includes(k)) throw new Error(`${exemptionsFile}: exemption for unknown block ${k}`)
+  for (const k of Object.keys(cfg.containers ?? {})) if (!allKeys.includes(k)) throw new Error(`container mode for unknown block ${k} (the reference has ${allKeys.join(', ')})`)
   for (const k of Object.keys(contextGaps)) if (!existsSync(join(reference, k))) throw new Error(`${contextGapsFile}: context gap for unknown instance ${k}`)
 
   // Which keys have a new implementation (gate). The block map module is read through Vite, so ask the server side
@@ -202,17 +204,24 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
       actual: Buffer,
       styleDiffs?: ReturnType<typeof diffStyles>,
       origin?: [number, number],
+      container?: { info: ContainerInfo; problems: string[] },
     ) => {
       const pix = comparePng(expected, actual)
+      // Container mode: a placeholder the new render lacks or sizes differently fails the check even where the pixels stay under the tolerance.
+      const cproblems = container?.problems ?? []
       const base = { comparison, key: inst.key, instance: inst.instance, viewport: vp, state }
       const originInfo = origin ? { origin } : {}
       const styleInfo = styleDiffs ? { styleDiffs: styleDiffs.slice(0, 200), styleDiffCount: styleDiffs.length } : {}
-      const num = { ...originInfo, diffPixels: pix.diffPixels, totalPixels: pix.totalPixels, ratio: pix.ratio, sizeA: pix.sizeA, sizeB: pix.sizeB }
-      if (pix.ok) return record({ ...base, status: 'pass', ...num, ...styleInfo })
+      const containerInfo = container ? { container: container.info } : {}
+      const num = { ...originInfo, ...containerInfo, diffPixels: pix.diffPixels, totalPixels: pix.totalPixels, ratio: pix.ratio, sizeA: pix.sizeA, sizeB: pix.sizeB }
+      if (pix.ok && !cproblems.length) return record({ ...base, status: 'pass', ...num, ...styleInfo })
       const ex = comparison === 'builder-vs-frontend' ? exemptions[inst.key] : undefined
-      const message = pix.sameSize
-        ? `${pix.diffPixels} of ${pix.totalPixels} pixels differ (${(pix.ratio * 100).toFixed(3)} %, limit ${(TOLERANCE.maxDiffPixelRatio * 100).toFixed(1)} %)`
-        : `size differs: ${comparison === 'builder-vs-frontend' ? 'builder' : comparison === 'frontend-vs-legacy' ? 'frontend' : 'legacy render'} ${pix.sizeB.join('x')} vs ${pix.sizeA.join('x')}`
+      const pixelMessage = pix.ok
+        ? ''
+        : pix.sameSize
+          ? `${pix.diffPixels} of ${pix.totalPixels} pixels differ (${(pix.ratio * 100).toFixed(3)} %, limit ${(TOLERANCE.maxDiffPixelRatio * 100).toFixed(1)} %)`
+          : `size differs: ${comparison === 'builder-vs-frontend' ? 'builder' : comparison === 'frontend-vs-legacy' ? 'frontend' : 'legacy render'} ${pix.sizeB.join('x')} vs ${pix.sizeA.join('x')}`
+      const message = [pixelMessage, ...(cproblems.length ? [`container mode: ${cproblems.join('; ')}`] : [])].filter(Boolean).join('; ')
       // validate only: a listed instance/viewport whose reference holds page context the excerpt lacks
       const gapKey = `${inst.key}/${inst.instance}`
       const gap = comparison === 'reference-vs-legacy' ? contextGaps[gapKey] : undefined
@@ -228,6 +237,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
 
     type Job = { inst: InstanceInfo; vp: number }
     // One pass over the pack at a scrollbar width. The verdict pass is the one at `scrollbar`; the edge pass is informational.
+    const implemented = Object.entries(inventory).filter(([, v]) => v.frontend).map(([k]) => k)
     const doPass = async (scrollbar: number, vps: number[], wantStyles: boolean) => {
     const jobs: Job[] = []
     for (const k of keys) {
@@ -256,6 +266,12 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
       const origin: [number, number] = existsSync(pngFile) ? inferOrigin(pngSize(pngFile), cap0) : [0, 0]
       const problems: string[] = []
       const ctx = await newContext(browser, vp, bo, problems)
+      // Container mode (gate only, and not in identity mode where the new side gets the legacy markup): the foreign
+      // children of this instance, chosen by the consumer's config for this block only.
+      const containerSpec = opts.mode === 'gate' && !opts.legacyCssOnNew ? cfg.containers?.[inst.key] : undefined
+      const foreignSelectors = containerSpec ? resolveForeign(containerSpec, readFixture(inst.dir), { key: inst.key, instance: inst.instance, viewport: vp, implemented }) : undefined
+      // the boxes measured in the legacy render of the current width group, handed to the new renders
+      let measured: ForeignBox[] | undefined
       try {
         const spec = (route: 'legacy' | 'frontend' | 'builder', st: string[]) => ({
           route,
@@ -269,6 +285,8 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
           legacyCss: route !== 'legacy' && !!opts.legacyCssOnNew,
           states: st,
           wantStyles: opts.mode === 'gate' && wantStyles,
+          ...(route === 'legacy' && foreignSelectors ? { container: foreignSelectors } : {}),
+          ...(route !== 'legacy' && measured ? { foreign: measured } : {}),
         })
         // A state's box width may differ per state (it does not today); render each distinct width once.
         const groups = new Map<number | undefined, string[]>()
@@ -288,6 +306,11 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
                 }
               : undefined
           const legacy = await render(ctx, problems, bo, spec('legacy', st), fit)
+          measured = legacy.foreign
+          const info = (rendered: { containerProblems?: string[] }) =>
+            measured
+              ? { info: { replaced: measured.map(({ id, index, selector, width, height, margin }) => ({ id, index, selector, width, height, margin })) }, problems: rendered.containerProblems ?? [] }
+              : undefined
           if (opts.mode === 'validate') {
             for (const s of st) {
               const r = legacy.states[s]
@@ -324,7 +347,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
                 record({ comparison: 'frontend-vs-legacy', key: inst.key, instance: inst.instance, viewport: vp, state: s, status: 'fail', message: `frontend: ${b.error}` })
                 continue
               }
-              judge('frontend-vs-legacy', inst, vp, s, a.png, b.png, diffStyles(a.styles ?? [], b.styles ?? []))
+              judge('frontend-vs-legacy', inst, vp, s, a.png, b.png, diffStyles(a.styles ?? [], b.styles ?? []), undefined, info(front))
             }
           }
           if (typeof build === 'string') {
@@ -337,7 +360,7 @@ export const run = async (opts: RunOptions): Promise<RunSummary> => {
                 record({ comparison: 'builder-vs-frontend', key: inst.key, instance: inst.instance, viewport: vp, state: s, status: 'fail', message: `builder: ${'error' in b ? b.error : 'ok'}; frontend: ${'error' in a ? a.error : 'ok'}` })
                 continue
               }
-              judge('builder-vs-frontend', inst, vp, s, a.png, b.png, diffStyles(a.styles ?? [], b.styles ?? []))
+              judge('builder-vs-frontend', inst, vp, s, a.png, b.png, diffStyles(a.styles ?? [], b.styles ?? []), undefined, info(build))
             }
           } else failAll('builder-vs-frontend', `frontend render failed: ${front}`)
         }
