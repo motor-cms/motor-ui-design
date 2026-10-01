@@ -1,0 +1,2 @@
+/* Tells Tailwind where the `tw:` classes of the recipes live. Import it from the app stylesheet, never write a path to this package. */
+@source "./dist";

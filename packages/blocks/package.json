@@ -11,11 +11,13 @@
       "import": "./dist/index.js"
     },
     "./frontend/*.vue": "./src/frontend/*.vue",
-    "./builder/*.vue": "./src/builder/*.vue"
+    "./builder/*.vue": "./src/builder/*.vue",
+    "./sources.css": "./sources.css"
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "sources.css"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json"

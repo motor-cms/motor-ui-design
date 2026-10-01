@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -20,6 +21,17 @@ const HTML_ALLOWED = new Set(['packages/harness/app/index.html'])
 // Their values are checked by the private layer's scan like every other file here.
 const STYLES_SRC_CSS = /^packages\/styles\/src\/[^/]+\.css$/
 
+// `sources.css` of a package only tells Tailwind where to look (`@source`, `@import`); it holds no declaration, so it
+// holds no value. Allowed by content, not by name: a rule or a custom property in it is still compiled CSS.
+const SOURCES_CSS = /^packages\/[^/]+\/sources\.css$/
+const onlySourceDirectives = (css: string): boolean =>
+  css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .every((l) => /^@(source|import)\s+"[^"{};]*";$/.test(l))
+
 const violations = (files: string[]): string[] => {
   const out: string[] = []
   for (const f of files) {
@@ -29,7 +41,8 @@ const violations = (files: string[]): string[] => {
     if (SCREENSHOT.test(f)) why.push('image/screenshot')
     if (FONT.test(f)) why.push('font file')
     if (/\.html?$/i.test(f) && !HTML_ALLOWED.has(f)) why.push('captured or compiled HTML')
-    if (/\.css$/i.test(f) && !STYLES_SRC_CSS.test(f)) why.push('compiled CSS')
+    if (/\.css$/i.test(f) && !STYLES_SRC_CSS.test(f) && !(SOURCES_CSS.test(f) && onlySourceDirectives(readFileSync(resolve(root, f), 'utf8'))))
+      why.push('compiled CSS')
     if (why.length) out.push(`${f}: ${why.join(', ')}`)
   }
   return out
@@ -81,5 +94,12 @@ describe('core carries no client data (structural)', () => {
       'README.md',
     ]
     expect(violations(ok)).toEqual([])
+  })
+
+  it('break-it: a sources.css passes only while it holds @source and @import lines', () => {
+    expect(onlySourceDirectives('/* c */\n@import "pkg/sources.css";\n@source "./dist";\n')).toBe(true)
+    expect(onlySourceDirectives('@source "./dist";\n.tw\\:x { color: red; }\n')).toBe(false)
+    expect(onlySourceDirectives('@source "./dist";\n:root { --c: #fff; }\n')).toBe(false)
+    expect(onlySourceDirectives('@import url("x.css");\n')).toBe(false)
   })
 })

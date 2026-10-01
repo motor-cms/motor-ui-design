@@ -1,0 +1,3 @@
+/* Tells Tailwind where the `tw:` classes of the blocks and the recipes they use live. Import it from the app stylesheet, never write a path to this package. */
+@import "@motor-cms/ui-design-recipes/sources.css";
+@source "./src";

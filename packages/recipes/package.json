@@ -9,10 +9,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./sources.css": "./sources.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "sources.css"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json"
