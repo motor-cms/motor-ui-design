@@ -13,7 +13,7 @@ concurrency:
 
 permissions:
   contents: write
-  id-token: write
+  id-token: write   # OIDC -> npm trusted publishing (no stored NPM_TOKEN)
 
 jobs:
   release:
@@ -89,17 +89,6 @@ jobs:
           pnpm changeset version
           echo "versioned=true" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch npm token from Infisical (OIDC, no stored token)
-        if: steps.changesets.outputs.has_changesets == 'true' && steps.pkgs.outputs.changed == 'true'
-        uses: Infisical/secrets-action@v1.0.7
-        with:
-          method: oidc
-          domain: https://secrets.tastatur-und-maus.net
-          identity-id: ${{ secrets.INFISICAL_IDENTITY_ID }}
-          project-slug: ${{ secrets.INFISICAL_PROJECT_SLUG }}
-          env-slug: prod
-          secret-path: /
-        # exports NPM_TOKEN to the job env for the publish step
       - name: Publish to npm
         if: steps.version.outputs.versioned == 'true'
         id: publish
@@ -123,9 +112,6 @@ jobs:
             exit 1
           fi
           echo "published=true" >> "$GITHUB_OUTPUT"
-        env:
-          NPM_TOKEN: ${{ env.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
 
       - name: Commit and push version bump
         if: steps.publish.outputs.published == 'true'
