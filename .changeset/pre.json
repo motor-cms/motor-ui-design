@@ -1,0 +1,23 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "@motor-cms/ui-design-blocks": "0.0.0",
+    "@motor-cms/ui-design-harness": "0.0.0",
+    "@motor-cms/ui-design-recipes": "0.0.0",
+    "@motor-cms/ui-design-styles": "0.0.0",
+    "@motor-cms/ui-design-tokens": "0.0.0"
+  },
+  "changesets": [
+    "block-recipe-base",
+    "button-atom",
+    "card-component",
+    "container-mode",
+    "harness-transform-clipped",
+    "headline-atom",
+    "paragraph-atom",
+    "radius-token-names",
+    "row-grid",
+    "sources-css"
+  ]
+}
