@@ -98,7 +98,7 @@ jobs:
           identity-id: ${{ secrets.INFISICAL_IDENTITY_ID }}
           project-slug: ${{ secrets.INFISICAL_PROJECT_SLUG }}
           env-slug: prod
-          secret-path: /
+          secret-path: /npm
         # exports NPM_TOKEN to the job env for the publish step
       - name: Publish to npm
         if: steps.version.outputs.versioned == 'true'
